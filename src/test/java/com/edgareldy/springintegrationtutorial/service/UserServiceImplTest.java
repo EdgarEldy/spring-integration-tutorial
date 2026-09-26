@@ -204,4 +204,26 @@ class UserServiceImplTest {
         verify(userRepository, never()).save(any());
         verify(passwordEncoder, never()).encode(any());
     }
+
+    @Test
+    void _10_ShouldRejectTheRegistration_WhenThePasswordExceeds72Bytes() {
+        // 40 characters pass @Size(max = 72), but "é" takes 2 bytes in UTF-8: 80 bytes in total.
+        String password = "é".repeat(40);
+        given(userRepository.existsByEmail("jane@example.com")).willReturn(false);
+
+        assertThatThrownBy(() -> userService.register(new RegisterRequest("Jane", "Doe", "jane@example.com", password)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("Password must not exceed 72 bytes");
+        verify(passwordEncoder, never()).encode(any());
+    }
+
+    @Test
+    void _11_ShouldRefuseTheAdminAccount_WhenItsPasswordExceeds72Bytes() {
+        given(userRepository.existsByEmail("admin@example.com")).willReturn(false);
+
+        assertThatThrownBy(() -> userService.createAdminIfAbsent("admin@example.com", "x".repeat(73)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("Password must not exceed 72 bytes");
+        verify(userRepository, never()).save(any());
+    }
 }
