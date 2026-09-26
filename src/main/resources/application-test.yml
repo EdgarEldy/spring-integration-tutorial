@@ -11,6 +11,10 @@ orders:
   # A short poll interval keeps the file-based tests fast.
   poller:
     fixed-delay: 100
+  # Same number of attempts as in production, so the tests count the real retries, but almost no wait
+  # between them.
+  persistence:
+    retry-delay: 10ms
 
 app:
   jwt:
