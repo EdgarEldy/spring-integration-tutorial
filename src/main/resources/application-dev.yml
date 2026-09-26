@@ -1,0 +1,25 @@
+# Local development: the application runs from the IDE or "mvnw spring-boot:run -Dspring-boot.run.profiles=dev"
+# against the PostgreSQL container started by "docker compose up db", or inside docker-compose, which
+# activates this profile by default and overrides the datasource below with SPRING_DATASOURCE_*.
+# Port 5433 matches the host port published by docker-compose.yml (DB_PORT), so it never clashes
+# with a PostgreSQL already installed on the machine.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:${DB_PORT:5433}/${DB_NAME:spring_integration_tutorial}
+    username: ${DB_USER:spring_integration_tutorial}
+    password: ${DB_PASSWORD:spring_integration_tutorial}
+  jpa:
+    show-sql: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # integrationgraph renders the live flow (channels, endpoints, adapters and the links between
+        # them) as JSON. It is only exposed here: the graph describes the application's internals, which
+        # is useful while developing and nothing a production instance needs to publish.
+        include: health,integrationgraph
+
+logging:
+  level:
+    com.edgareldy.springintegrationtutorial: DEBUG
