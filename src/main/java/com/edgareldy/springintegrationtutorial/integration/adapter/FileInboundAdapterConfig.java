@@ -23,9 +23,9 @@ import org.springframework.integration.support.MessageBuilder;
 import org.springframework.messaging.Message;
 
 /**
- * The file-drop inbound channel: polls the incoming orders directory and puts the content of each
- * {@code *.csv} file (one order line, {@code customerId,productId,quantity}) onto the same intake channel
- * the HTTP gateway uses, after moving the file to the processed directory.
+ * The file-drop inbound channel: polls the incoming orders directory and sends the whole content of each
+ * {@code *.csv} file (one or more order lines, {@code customerId,productId,quantity}) to the bulk splitter,
+ * after moving the file to the processed directory.
  * <p>
  * Created edgar.muhamyangabo on 9/26/26
  * Author : edgar.muhamyangabo
@@ -74,16 +74,18 @@ public class FileInboundAdapterConfig {
 
     /**
      * @param incomingOrderFiles the directory source
-     * @return the source of raw order lines polled onto the intake channel
+     * @return the source of order file contents polled onto the order file channel
      */
     // @InboundChannelAdapter on a MessageSource bean creates a polling endpoint: on every tick of the poller
     // (none is named here, so the default PollerMetadata of IntegrationConfig applies) it calls receive() and
     // sends each non-null message to the channel. It is the inbound Channel Adapter of the EIP catalog: it
     // connects something outside the messaging system, a directory, to a channel.
-    // The message it sends carries the file's content, not the File: the shared transformer receives a raw
-    // CSV line from this source exactly as it receives a raw REST payload from the gateway.
+    // The message it sends carries the file's content, not the File. Every file goes to the splitter, which
+    // sends each of its lines into the shared intake flow: the transformer receives a raw CSV line from this
+    // source exactly as it receives a raw REST payload from the gateway, and a single-order file is simply a
+    // batch of one line.
     @Bean
-    @InboundChannelAdapter(channel = IntegrationConfig.INTAKE_CHANNEL)
+    @InboundChannelAdapter(channel = IntegrationConfig.ORDER_FILE_CHANNEL)
     public MessageSource<String> incomingOrderLines(FileReadingMessageSource incomingOrderFiles) {
         createDirectory(processedDirectory);
         return () -> {
