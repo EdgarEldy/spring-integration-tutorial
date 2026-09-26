@@ -29,6 +29,7 @@
 	<properties>
 		<java.version>17</java.version>
 		<springdoc-openapi.version>3.1.1</springdoc-openapi.version>
+		<jjwt.version>0.13.0</jjwt.version>
 	</properties>
 
 	<dependencyManagement>
@@ -38,6 +39,22 @@
 				<groupId>org.springdoc</groupId>
 				<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 				<version>${springdoc-openapi.version}</version>
+			</dependency>
+			<!-- jjwt is not managed by the Spring Boot BOM either: its three modules share one version. -->
+			<dependency>
+				<groupId>io.jsonwebtoken</groupId>
+				<artifactId>jjwt-api</artifactId>
+				<version>${jjwt.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>io.jsonwebtoken</groupId>
+				<artifactId>jjwt-impl</artifactId>
+				<version>${jjwt.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>io.jsonwebtoken</groupId>
+				<artifactId>jjwt-jackson</artifactId>
+				<version>${jjwt.version}</version>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
@@ -95,6 +112,22 @@
 		<dependency>
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+		</dependency>
+		<!-- JWT signing and parsing: the code compiles against the API only, the implementation and its
+		     JSON serializer are runtime details. -->
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-jackson</artifactId>
+			<scope>runtime</scope>
 		</dependency>
 
 		<dependency>
