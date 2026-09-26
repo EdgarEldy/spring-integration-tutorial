@@ -82,6 +82,28 @@ class OrderRepositoryTest {
         assertThat(reloaded.getProduct().getCategory().getCategoryName()).isEqualTo("Repository test");
     }
 
+    @Test
+    void _03_ShouldUpdateTheStatus_WhenTheOrderHasTheExpectedStatus() {
+        Order order = orderRepository.saveAndFlush(newOrder(OrderSource.API, OrderStatus.PENDING_REVIEW));
+
+        int updated = orderRepository.updateStatusIfCurrent(order.getId(), OrderStatus.PENDING_REVIEW, OrderStatus.APPROVED);
+
+        assertThat(updated).isOne();
+        // The persistence context was cleared by the update: this read goes back to the database.
+        assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.APPROVED);
+    }
+
+    @Test
+    void _04_ShouldUpdateNothing_WhenTheOrderNoLongerHasTheExpectedStatus() {
+        Order order = orderRepository.saveAndFlush(newOrder(OrderSource.API, OrderStatus.APPROVED));
+
+        int updated = orderRepository.updateStatusIfCurrent(order.getId(), OrderStatus.PENDING_REVIEW, OrderStatus.REJECTED);
+
+        assertThat(updated).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM orders WHERE id = ?", String.class, order.getId()))
+                .isEqualTo("APPROVED");
+    }
+
     private Order newOrder(OrderSource source, OrderStatus status) {
         Category category = new Category();
         category.setCategoryName("Repository test");
