@@ -13,6 +13,7 @@ import com.edgareldy.springintegrationtutorial.entity.Order;
 import com.edgareldy.springintegrationtutorial.entity.OrderSource;
 import com.edgareldy.springintegrationtutorial.entity.OrderStatus;
 import com.edgareldy.springintegrationtutorial.entity.Product;
+import com.edgareldy.springintegrationtutorial.exception.BusinessRuleException;
 import com.edgareldy.springintegrationtutorial.exception.ResourceNotFoundException;
 import com.edgareldy.springintegrationtutorial.integration.message.OrderCommand;
 import com.edgareldy.springintegrationtutorial.repository.CustomerRepository;
@@ -29,7 +30,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
  * Unit tests of {@link OrderServiceImpl} with mocked repositories: existence checks, total snapshot,
- * initial status and source.
+ * initial status and source, status updates and the single resolution of a review.
  * <p>
  * Created edgar.muhamyangabo on 9/26/26
  * Author : edgar.muhamyangabo
@@ -101,6 +102,69 @@ class OrderServiceImplTest {
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessage("Product with id 98 not found");
         verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void _05_ShouldSetTheNewStatus_WhenTheOrderExists() {
+        Order existing = order(OrderStatus.RECEIVED);
+        when(orderRepository.findById(5L)).thenReturn(Optional.of(existing));
+
+        Order updated = orderService.updateStatus(5L, OrderStatus.AUTO_CONFIRMED);
+
+        assertThat(updated).isSameAs(existing);
+        assertThat(updated.getStatus()).isEqualTo(OrderStatus.AUTO_CONFIRMED);
+    }
+
+    @Test
+    void _06_ShouldThrowNotFound_WhenTheOrderToUpdateDoesNotExist() {
+        when(orderRepository.findById(5L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> orderService.updateStatus(5L, OrderStatus.PENDING_REVIEW))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Order with id 5 not found");
+    }
+
+    @Test
+    void _07_ShouldReturnTheResolvedOrder_WhenTheOrderIsPendingReview() {
+        Order resolved = order(OrderStatus.APPROVED);
+        when(orderRepository.updateStatusIfCurrent(5L, OrderStatus.PENDING_REVIEW, OrderStatus.APPROVED)).thenReturn(1);
+        when(orderRepository.findById(5L)).thenReturn(Optional.of(resolved));
+
+        assertThat(orderService.resolveReview(5L, OrderStatus.APPROVED)).isSameAs(resolved);
+    }
+
+    @Test
+    void _08_ShouldThrowABusinessRuleNamingTheCurrentStatus_WhenTheOrderIsNotPendingReview() {
+        when(orderRepository.updateStatusIfCurrent(5L, OrderStatus.PENDING_REVIEW, OrderStatus.REJECTED)).thenReturn(0);
+        when(orderRepository.findById(5L)).thenReturn(Optional.of(order(OrderStatus.APPROVED)));
+
+        assertThatThrownBy(() -> orderService.resolveReview(5L, OrderStatus.REJECTED))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("Order with id 5 is not pending review (status APPROVED)");
+    }
+
+    @Test
+    void _09_ShouldThrowNotFound_WhenTheOrderToResolveDoesNotExist() {
+        when(orderRepository.updateStatusIfCurrent(5L, OrderStatus.PENDING_REVIEW, OrderStatus.APPROVED)).thenReturn(0);
+        when(orderRepository.findById(5L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> orderService.resolveReview(5L, OrderStatus.APPROVED))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Order with id 5 not found");
+    }
+
+    @Test
+    void _10_ShouldRefuseWithoutTouchingTheDatabase_WhenTheOutcomeDoesNotEndAReview() {
+        assertThatThrownBy(() -> orderService.resolveReview(5L, OrderStatus.AUTO_CONFIRMED))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(orderRepository);
+    }
+
+    private static Order order(OrderStatus status) {
+        Order order = new Order();
+        order.setId(5L);
+        order.setStatus(status);
+        return order;
     }
 
     private static Product product(String unitPrice) {
