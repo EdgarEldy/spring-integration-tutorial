@@ -21,7 +21,8 @@ public record RegisterRequest(
         @NotBlank @Size(max = 100) String firstName,
         @NotBlank @Size(max = 100) String lastName,
         @NotBlank @Email @Size(max = 255) String email,
-        // BCrypt only hashes the first 72 bytes of a password: a longer one would be silently truncated.
+        // BCrypt only hashes 72 bytes of a password. @Size counts characters, so this is a first bound;
+        // UserServiceImpl also checks the UTF-8 byte length, which multi-byte characters can exceed.
         @NotBlank @Size(min = 8, max = 72) String password
 ) {
 }
