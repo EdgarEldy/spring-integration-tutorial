@@ -26,6 +26,12 @@ public class IntegrationConfig {
     public static final String INTAKE_CHANNEL = "intake-channel";
 
     /**
+     * Name of the channel carrying the normalized {@code OrderCommand}s from the shared transformer to
+     * the persistence activator.
+     */
+    public static final String ORDER_COMMAND_CHANNEL = "order-command-channel";
+
+    /**
      * @return the shared intake channel
      */
     // A DirectChannel hands each message to its single subscriber in the sender's own thread, like a
@@ -38,6 +44,16 @@ public class IntegrationConfig {
     // gives it one documented type and makes it visible in the integration graph under a stable name.
     @Bean(INTAKE_CHANNEL)
     public DirectChannel intakeChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the channel between the transformer and the persistence activator
+     */
+    // Also a DirectChannel, for the same reason as the intake channel: the persistence step must still run
+    // in the HTTP caller's thread, so that an unknown customer or product reaches the client as a 404.
+    @Bean(ORDER_COMMAND_CHANNEL)
+    public DirectChannel orderCommandChannel() {
         return new DirectChannel();
     }
 
