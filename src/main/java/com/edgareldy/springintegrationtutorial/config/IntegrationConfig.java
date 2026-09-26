@@ -32,6 +32,71 @@ public class IntegrationConfig {
     public static final String ORDER_COMMAND_CHANNEL = "order-command-channel";
 
     /**
+     * Name of the channel carrying each persisted order from the persistence activator to the
+     * content-based router.
+     */
+    public static final String PERSISTED_ORDER_CHANNEL = "persisted-order-channel";
+
+    /**
+     * Name of the router's output for orders under the review threshold.
+     */
+    public static final String AUTO_CONFIRM_CHANNEL = "auto-confirm-channel";
+
+    /**
+     * Name of the router's output for orders at or above the review threshold.
+     */
+    public static final String MANUAL_REVIEW_CHANNEL = "manual-review-channel";
+
+    /**
+     * Name of the input of the confirmation file adapter: a confirmed order (auto-confirmed or approved),
+     * whose status is already recorded.
+     */
+    public static final String CONFIRMATION_CHANNEL = "confirmation-channel";
+
+    /**
+     * Name of the channel carrying the rendered confirmation file to its file writer.
+     */
+    public static final String CONFIRMATION_FILE_CHANNEL = "confirmation-file-channel";
+
+    /**
+     * Name of the input of the review-queue file adapter: an order whose status is already
+     * {@code PENDING_REVIEW}.
+     */
+    public static final String REVIEW_QUEUE_CHANNEL = "review-queue-channel";
+
+    /**
+     * Name of the channel carrying the rendered review-queue entry to its file writer.
+     */
+    public static final String REVIEW_FILE_CHANNEL = "review-file-channel";
+
+    /**
+     * Name of the input of the rejection file adapter: a rejected order, with the reason in the
+     * {@link #REJECTION_REASON_HEADER} header.
+     */
+    public static final String REJECTION_CHANNEL = "rejection-channel";
+
+    /**
+     * Name of the channel carrying the rendered rejection file to its file writer.
+     */
+    public static final String REJECTION_FILE_CHANNEL = "rejection-file-channel";
+
+    /**
+     * Name of the channel the review gateway sends each administrator decision to.
+     */
+    public static final String REVIEW_DECISION_CHANNEL = "review-decision-channel";
+
+    /**
+     * Header carrying the id of the order an outbound file is written for, so a step failing on the file
+     * message still knows which order it concerns.
+     */
+    public static final String ORDER_ID_HEADER = "orderId";
+
+    /**
+     * Header carrying the administrator's reason on a rejected order.
+     */
+    public static final String REJECTION_REASON_HEADER = "rejectionReason";
+
+    /**
      * @return the shared intake channel
      */
     // A DirectChannel hands each message to its single subscriber in the sender's own thread, like a
@@ -57,8 +122,94 @@ public class IntegrationConfig {
         return new DirectChannel();
     }
 
+    // The routing part of the flow below is made of DirectChannels too. An HTTP intake keeps running in
+    // the request thread down to the outbound file, and a review decision down to its confirmation or
+    // rejection file, so an unknown order (404) or an order resolved twice (422) reaches the administrator
+    // as an HTTP error. Each outcome step (status update, rendering, file writing) sits behind its own
+    // channel, so it can be tested, replaced or given an error policy on its own.
+
     /**
-     * @param fixedDelay        milliseconds between the end of one poll and the start of the next
+     * @return the channel between the persistence activator and the router
+     */
+    @Bean(PERSISTED_ORDER_CHANNEL)
+    public DirectChannel persistedOrderChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the router's auto-confirm output
+     */
+    @Bean(AUTO_CONFIRM_CHANNEL)
+    public DirectChannel autoConfirmChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the router's manual-review output
+     */
+    @Bean(MANUAL_REVIEW_CHANNEL)
+    public DirectChannel manualReviewChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the input of the confirmation file adapter
+     */
+    @Bean(CONFIRMATION_CHANNEL)
+    public DirectChannel confirmationChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the channel feeding the confirmation file writer
+     */
+    @Bean(CONFIRMATION_FILE_CHANNEL)
+    public DirectChannel confirmationFileChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the input of the review-queue file adapter
+     */
+    @Bean(REVIEW_QUEUE_CHANNEL)
+    public DirectChannel reviewQueueChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the channel feeding the review-queue file writer
+     */
+    @Bean(REVIEW_FILE_CHANNEL)
+    public DirectChannel reviewFileChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the input of the rejection file adapter
+     */
+    @Bean(REJECTION_CHANNEL)
+    public DirectChannel rejectionChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the channel feeding the rejection file writer
+     */
+    @Bean(REJECTION_FILE_CHANNEL)
+    public DirectChannel rejectionFileChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the channel of the administrators' review decisions
+     */
+    @Bean(REVIEW_DECISION_CHANNEL)
+    public DirectChannel reviewDecisionChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @param fixedDelay       milliseconds between the end of one poll and the start of the next
      * @param maxMessagesPerPoll how many messages one poll may take at most
      * @return the poller used by every polling endpoint that does not declare its own
      */
