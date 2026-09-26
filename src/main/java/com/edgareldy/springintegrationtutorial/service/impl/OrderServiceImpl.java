@@ -4,6 +4,7 @@ import com.edgareldy.springintegrationtutorial.entity.Customer;
 import com.edgareldy.springintegrationtutorial.entity.Order;
 import com.edgareldy.springintegrationtutorial.entity.OrderStatus;
 import com.edgareldy.springintegrationtutorial.entity.Product;
+import com.edgareldy.springintegrationtutorial.exception.BusinessRuleException;
 import com.edgareldy.springintegrationtutorial.exception.ResourceNotFoundException;
 import com.edgareldy.springintegrationtutorial.integration.message.OrderCommand;
 import com.edgareldy.springintegrationtutorial.repository.CustomerRepository;
@@ -53,5 +54,32 @@ public class OrderServiceImpl implements OrderService {
         order.setSource(command.source());
         order.setStatus(OrderStatus.RECEIVED);
         return orderRepository.save(order);
+    }
+
+    @Override
+    @Transactional
+    public Order updateStatus(Long orderId, OrderStatus status) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> ResourceNotFoundException.of("Order", orderId));
+        // A managed entity: the change is written by dirty checking when the transaction commits.
+        order.setStatus(status);
+        return order;
+    }
+
+    @Override
+    @Transactional
+    public Order resolveReview(Long orderId, OrderStatus outcome) {
+        if (outcome != OrderStatus.APPROVED && outcome != OrderStatus.REJECTED) {
+            throw new IllegalArgumentException("A review ends with APPROVED or REJECTED, not " + outcome);
+        }
+        if (orderRepository.updateStatusIfCurrent(orderId, OrderStatus.PENDING_REVIEW, outcome) == 0) {
+            // Nothing updated: either the order does not exist, or it is not (or no longer) pending review.
+            Order order = orderRepository.findById(orderId)
+                    .orElseThrow(() -> ResourceNotFoundException.of("Order", orderId));
+            throw new BusinessRuleException("Order with id " + orderId + " is not pending review (status "
+                    + order.getStatus() + ")");
+        }
+        return orderRepository.findById(orderId)
+                .orElseThrow(() -> ResourceNotFoundException.of("Order", orderId));
     }
 }
