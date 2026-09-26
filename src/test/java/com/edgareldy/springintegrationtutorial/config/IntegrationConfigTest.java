@@ -37,6 +37,10 @@ class IntegrationConfigTest {
     private MessageChannel intakeChannel;
 
     @Autowired
+    @Qualifier(IntegrationConfig.REVIEW_DECISION_CHANNEL)
+    private MessageChannel reviewDecisionChannel;
+
+    @Autowired
     @Qualifier(PollerMetadata.DEFAULT_POLLER)
     private PollerMetadata defaultPoller;
 
@@ -54,5 +58,11 @@ class IntegrationConfigTest {
                     assertThat(trigger.isFixedRate()).isFalse();
                 });
         assertThat(defaultPoller.getMaxMessagesPerPoll()).isEqualTo(10);
+    }
+
+    @Test
+    void _03_ShouldBeADirectChannel_WhenTheReviewDecisionChannelIsInjected() {
+        // The administrator's HTTP call must get the 404 or 422 of the decision step back, in its own thread.
+        assertThat(reviewDecisionChannel).isInstanceOf(DirectChannel.class);
     }
 }
