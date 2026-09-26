@@ -115,6 +115,14 @@ class FlywaySchemaTest {
                 .isEqualTo("30.00");
     }
 
+    @Test
+    void _09_ShouldNotApplyTheDemoData_WhenTheDevProfileIsNotActive() {
+        Integer demoMigrations = jdbc.queryForObject(
+                "SELECT count(*) FROM flyway_schema_history WHERE script = 'R__demo_data.sql'", Integer.class);
+
+        assertThat(demoMigrations).isZero();
+    }
+
     private long[] insertCustomerAndProduct() {
         Long categoryId = jdbc.queryForObject(
                 "INSERT INTO categories (category_name) VALUES ('Schema test') RETURNING id", Long.class);
