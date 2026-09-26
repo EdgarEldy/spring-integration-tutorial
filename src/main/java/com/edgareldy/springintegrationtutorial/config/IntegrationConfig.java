@@ -4,13 +4,19 @@ import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.dao.RecoverableDataAccessException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.integration.channel.DirectChannel;
+import org.springframework.integration.handler.advice.RequestHandlerRetryAdvice;
 import org.springframework.integration.scheduling.PollerMetadata;
 import org.springframework.scheduling.support.PeriodicTrigger;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.util.Assert;
 
 /**
  * Central place for the message channels shared by several flows and for the default poller of every
- * polling endpoint.
+ * polling endpoint, plus the retry advice of the persistence step.
  * <p>
  * Created edgar.muhamyangabo on 9/26/26
  * Author : edgar.muhamyangabo
@@ -307,7 +313,43 @@ public class IntegrationConfig {
     }
 
     /**
-     * @param fixedDelay       milliseconds between the end of one poll and the start of the next
+     * @param maxAttempts how many attempts a transient failure gets in total, the first one included
+     * @param retryDelay  the wait between two attempts
+     * @return the retry advice of the persistence activator
+     */
+    // An advice wraps the invocation of one endpoint's handler, the way an AOP interceptor wraps a method:
+    // here the handler is invoked again when it throws, and only once the attempts are exhausted does the
+    // exception leave the endpoint (to the HTTP caller through the gateway, or to the error channel of the
+    // per-line gateway on the file path). It is attached to OrderPersistenceActivator through its adviceChain, so only the
+    // database step is retried: the transformer before it is pure computation, and retrying it would
+    // fail the same way every time.
+    // Each attempt calls OrderService.receive() again, which opens a new transaction: a failed attempt
+    // rolled back its own work, so a retry never leaves a half-written order behind.
+    // The policy only retries what may succeed on a second try: TransientDataAccessException (lock or
+    // query timeout, deadlock victim), RecoverableDataAccessException (a lost connection that can be
+    // reopened) and CannotCreateTransactionException (no connection available when the transaction
+    // starts). The exception is looked up along the whole cause chain, since the endpoint wraps it in a
+    // MessageHandlingException. Everything else fails at once: an unknown customer or product
+    // (ResourceNotFoundException) is still unknown a second later, and a constraint violation does not
+    // go away either.
+    @Bean
+    public RequestHandlerRetryAdvice orderPersistenceRetryAdvice(
+            @Value("${orders.persistence.max-attempts}") int maxAttempts,
+            @Value("${orders.persistence.retry-delay}") Duration retryDelay) {
+        Assert.isTrue(maxAttempts >= 1, "orders.persistence.max-attempts must be at least 1");
+        RequestHandlerRetryAdvice advice = new RequestHandlerRetryAdvice();
+        advice.setRetryPolicy(RetryPolicy.builder()
+                // The policy counts retries, which come after the first attempt.
+                .maxRetries(maxAttempts - 1L)
+                .delay(retryDelay)
+                .includes(TransientDataAccessException.class, RecoverableDataAccessException.class,
+                        CannotCreateTransactionException.class)
+                .build());
+        return advice;
+    }
+
+    /**
+     * @param fixedDelay        milliseconds between the end of one poll and the start of the next
      * @param maxMessagesPerPoll how many messages one poll may take at most
      * @return the poller used by every polling endpoint that does not declare its own
      */
