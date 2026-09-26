@@ -30,3 +30,15 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Local environment ###
+.env
+
+### Runtime order directories: the folders are versioned, the files the flows read and write are not ###
+/incoming-orders/**
+/outgoing-orders/**
+/failed-orders/**
+!/incoming-orders/**/
+!/outgoing-orders/**/
+!/failed-orders/**/
+!.gitkeep

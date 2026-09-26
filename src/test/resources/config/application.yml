@@ -1,0 +1,8 @@
+# Test classpath only. Spring Boot reads classpath:/config/application.yml in addition to (and with
+# precedence over) classpath:/application.yml, so this file adds one setting without shadowing the shared
+# configuration: a Spring test that declares no profile still runs with the test profile, and therefore
+# with the isolated directories of application-test.yml instead of the repository's order folders.
+# A test class with @ActiveProfiles keeps the profiles it declares.
+spring:
+  profiles:
+    active: test

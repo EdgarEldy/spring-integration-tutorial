@@ -1,0 +1,53 @@
+# Runs the packaged application next to PostgreSQL.
+#   docker compose up --build      application + database
+#   docker compose up db           database only, for the dev profile run from the IDE (application-dev.yml)
+services:
+  db:
+    # Official image, never a custom build: the database needs no project specific layer.
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${DB_NAME:-spring_integration_tutorial}
+      POSTGRES_USER: ${DB_USER:-spring_integration_tutorial}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-spring_integration_tutorial}
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    # Runs as the host user owning the mounted directories, so the file adapters can read, move and
+    # write files in them (see APP_UID/APP_GID in .env.example).
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # dev by default: the demo categories, products and customers exist, and the integration graph is exposed.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      # Spring Boot binds these variables to spring.datasource.* through relaxed binding; they take
+      # precedence over the localhost datasource of application-dev.yml.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME:-spring_integration_tutorial}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-spring_integration_tutorial}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-spring_integration_tutorial}
+      # Same relaxed binding for orders.directories.*: each root points at its mounted volume, and the
+      # sub-directories (processed, confirmations, reviews, rejections, reports) follow their parent.
+      ORDERS_DIRECTORIES_INCOMING: /data/incoming-orders
+      ORDERS_DIRECTORIES_OUTGOING: /data/outgoing-orders
+      ORDERS_DIRECTORIES_FAILED: /data/failed-orders
+    volumes:
+      # Bind mounts of the repository folders: a CSV dropped into ./incoming-orders on the host is picked
+      # up by the file inbound adapter, and every file the flows write shows up on the host.
+      - ./incoming-orders:/data/incoming-orders
+      - ./outgoing-orders:/data/outgoing-orders
+      - ./failed-orders:/data/failed-orders
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+volumes:
+  db-data:

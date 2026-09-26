@@ -1,0 +1,45 @@
+# Shared configuration, active in every profile.
+# The datasource is deliberately absent here: application-dev.yml points at the docker-compose
+# database, docker-compose passes SPRING_DATASOURCE_* environment variables to the packaged app,
+# and the tests get theirs from a Testcontainers @ServiceConnection.
+spring:
+  application:
+    name: spring-integration-tutorial
+  jpa:
+    # Flyway owns the schema (db/migration). Hibernate only checks that the entities match it,
+    # so a mapping drift fails at startup instead of silently altering tables.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+orders:
+  # Every directory the flows read from or write to. Relative paths resolve against the working
+  # directory; docker-compose overrides them with ORDERS_DIRECTORIES_* environment variables
+  # (relaxed binding) pointing at the mounted volumes. The sub-directories follow their parent,
+  # so moving a parent is a single override.
+  directories:
+    incoming: incoming-orders
+    processed: ${orders.directories.incoming}/processed
+    outgoing: outgoing-orders
+    confirmations: ${orders.directories.outgoing}/confirmations
+    reviews: ${orders.directories.outgoing}/reviews
+    rejections: ${orders.directories.outgoing}/rejections
+    reports: ${orders.directories.outgoing}/reports
+    failed: failed-orders
+  # Default poller of every polling endpoint (IntegrationConfig): how often a poll runs, in
+  # milliseconds, and how many messages one poll may take.
+  poller:
+    fixed-delay: 1000
+    max-messages-per-poll: 10
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      # Lists each indicator (db, diskSpace, ping...) with its own status, without leaking details.
+      show-components: always

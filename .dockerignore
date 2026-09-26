@@ -1,0 +1,7 @@
+# Keep the build context small: only what the Dockerfile copies. The order directories in particular
+# never enter the image; docker-compose mounts them at runtime.
+*
+!pom.xml
+!mvnw
+!.mvn/
+!src/
