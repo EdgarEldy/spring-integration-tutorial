@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.edgareldy.springintegrationtutorial.TestcontainersConfiguration;
 import com.edgareldy.springintegrationtutorial.config.IntegrationConfig;
 import com.edgareldy.springintegrationtutorial.dto.order.OrderIntakeRequest;
+import com.edgareldy.springintegrationtutorial.entity.Order;
 import com.edgareldy.springintegrationtutorial.entity.OrderSource;
 import com.edgareldy.springintegrationtutorial.exception.ResourceNotFoundException;
 import com.edgareldy.springintegrationtutorial.integration.gateway.OrderIntakeGateway;
@@ -53,6 +54,8 @@ class OrderIntakeFlowTest {
 
     // Bean name Spring Integration gives the endpoint of an annotated method: <bean>.<method>.<annotation>.
     private static final String PERSISTENCE_ENDPOINT = "orderPersistenceActivator.persist.serviceActivator";
+
+    private static final String ROUTER_ENDPOINT = "orderValueRouter.route.router";
 
     @Autowired
     private MockIntegrationContext mockIntegrationContext;
@@ -102,9 +105,11 @@ class OrderIntakeFlowTest {
     }
 
     @Test
-    void _03_ShouldPersistAReceivedOrderWithItsTotalSnapshot_WhenACommandReachesThePersistenceStep() {
+    void _03_ShouldPersistAReceivedOrderAndPassItToTheRouter_WhenACommandReachesThePersistenceStep() {
         long customerId = data.customer();
         long productId = data.product("12.50");
+        // The router is cut off, so the order keeps the status the persistence step gave it.
+        ArgumentCaptor<Message<?>> captor = replaceWithACaptor(ROUTER_ENDPOINT);
 
         orderCommandChannel.send(new GenericMessage<>(new OrderCommand(customerId, productId, 4, OrderSource.FILE)));
 
@@ -112,6 +117,8 @@ class OrderIntakeFlowTest {
         assertThat(order).containsEntry("product_id", productId).containsEntry("quantity", 4)
                 .containsEntry("source", "FILE").containsEntry("status", "RECEIVED");
         assertThat((BigDecimal) order.get("total")).isEqualByComparingTo("50.00");
+        assertThat(captor.getValue().getPayload()).isInstanceOfSatisfying(Order.class,
+                persisted -> assertThat(persisted.getId()).isEqualTo(order.get("id")));
     }
 
     @Test
@@ -141,9 +148,13 @@ class OrderIntakeFlowTest {
     }
 
     private ArgumentCaptor<Message<?>> replacePersistenceWithACaptor() {
+        return replaceWithACaptor(PERSISTENCE_ENDPOINT);
+    }
+
+    private ArgumentCaptor<Message<?>> replaceWithACaptor(String endpoint) {
         ArgumentCaptor<Message<?>> captor = MockIntegration.messageArgumentCaptor();
-        // The mock captures the message and does nothing else: nothing is persisted, nothing is sent on.
-        mockIntegrationContext.substituteMessageHandlerFor(PERSISTENCE_ENDPOINT,
+        // The mock captures the message and does nothing else: nothing is handled, nothing is sent on.
+        mockIntegrationContext.substituteMessageHandlerFor(endpoint,
                 MockIntegration.mockMessageHandler(captor).handleNext(message -> { }));
         return captor;
     }
