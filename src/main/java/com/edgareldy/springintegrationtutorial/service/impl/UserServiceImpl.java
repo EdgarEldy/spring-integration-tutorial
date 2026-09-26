@@ -12,6 +12,7 @@ import com.edgareldy.springintegrationtutorial.repository.RoleRepository;
 import com.edgareldy.springintegrationtutorial.repository.UserRepository;
 import com.edgareldy.springintegrationtutorial.security.JwtService;
 import com.edgareldy.springintegrationtutorial.service.UserService;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -37,6 +38,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserServiceImpl implements UserService {
 
     static final String EMAIL_TAKEN = "Email is already registered";
+    static final String PASSWORD_TOO_LONG = "Password must not exceed 72 bytes";
+    private static final int MAX_PASSWORD_BYTES = 72;
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -92,6 +95,12 @@ public class UserServiceImpl implements UserService {
     }
 
     private User newUser(String firstName, String lastName, String email, String password, String roleName) {
+        // BCrypt only hashes 72 bytes and Spring Security's encoder refuses anything longer. @Size counts
+        // characters, and an accented letter or an emoji takes several UTF-8 bytes, so the byte length
+        // is checked here to answer a clear 422 (or a clear startup error for the admin) instead of a 500.
+        if (password.getBytes(StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
+            throw new BusinessRuleException(PASSWORD_TOO_LONG);
+        }
         User user = new User();
         user.setFirstName(firstName.trim());
         user.setLastName(lastName.trim());
