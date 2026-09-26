@@ -34,6 +34,19 @@ orders:
     fixed-delay: 1000
     max-messages-per-poll: 10
 
+app:
+  jwt:
+    # The signing secret (app.jwt.secret, APP_JWT_SECRET in the environment) has no default here: outside
+    # the dev and test profiles the application refuses to start until one is provided, at least 32 bytes long.
+    #
+    # How long a token issued on login stays valid (ISO-8601 or 1h, 30m...).
+    expiration: 1h
+  # Optional ADMIN account created at startup by AdminBootstrap when both variables are set. There is no
+  # default password anywhere: left empty, no admin account is created.
+  admin:
+    email: ${APP_ADMIN_EMAIL:}
+    password: ${APP_ADMIN_PASSWORD:}
+
 management:
   endpoints:
     web:

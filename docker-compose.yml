@@ -40,6 +40,12 @@ services:
       ORDERS_DIRECTORIES_INCOMING: /data/incoming-orders
       ORDERS_DIRECTORIES_OUTGOING: /data/outgoing-orders
       ORDERS_DIRECTORIES_FAILED: /data/failed-orders
+      # Signing secret of the JWTs (app.jwt.secret), with the same development default as application-dev.yml.
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-dev-only-jwt-secret-change-me-at-least-32-bytes}
+      # Optional ADMIN account created at startup when both are set in .env; empty by default, so no
+      # account and no password exist until you choose them.
+      APP_ADMIN_EMAIL: ${APP_ADMIN_EMAIL:-}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-}
     volumes:
       # Bind mounts of the repository folders: a CSV dropped into ./incoming-orders on the host is picked
       # up by the file inbound adapter, and every file the flows write shows up on the host.

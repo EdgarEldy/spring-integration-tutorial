@@ -269,13 +269,26 @@ Conventional REST + JWT - deliberately **not** modeled as an integration flow, s
 
 ### Tasks
 
-- [ ] `User`, `Role` entities (with the `role_user` join), `UserRepository`, `RoleRepository`
-- [ ] `UserService` (interface) + implementation: registration creates an enabled account with the `USER` role (duplicate email rejected), login issues a JWT, `me` returns the current profile
-- [ ] `AdminBootstrap`: at startup, creates an account with the `ADMIN` role from `APP_ADMIN_EMAIL`/`APP_ADMIN_PASSWORD` when both are set and the account does not exist yet - no default password anywhere in the code or the migrations, and nothing happens when the variables are absent
-- [ ] `JwtService`, `JwtAuthFilter`, `SecurityConfig`
-- [ ] `SecurityConfig` requires authentication on every `/api/v1/orders/**` route (both the intake gateway and the review endpoints added in `feature/message-routing`); the review endpoints additionally require `hasRole('ADMIN')`. The file-drop channel has no HTTP surface and is not subject to this filter - it is a trusted, internal-only input by design, documented as such rather than left ambiguous
-- [ ] `AuthController`
-- [ ] Tests: standard controller/service tests, no Spring Integration involved
+- [x] `User`, `Role` entities (with the `role_user` join), `UserRepository`, `RoleRepository`
+- [x] `UserService` (interface) + implementation: registration creates an enabled account with the `USER` role (duplicate email rejected), login issues a JWT, `me` returns the current profile
+- [x] `AdminBootstrap`: at startup, creates an account with the `ADMIN` role from `APP_ADMIN_EMAIL`/`APP_ADMIN_PASSWORD` when both are set and the account does not exist yet - no default password anywhere in the code or the migrations, and nothing happens when the variables are absent
+- [x] `JwtService`, `JwtAuthFilter`, `SecurityConfig`
+- [x] `SecurityConfig` requires authentication on every `/api/v1/orders/**` route (both the intake gateway and the review endpoints added in `feature/message-routing`); the review endpoints additionally require `hasRole('ADMIN')`. The file-drop channel has no HTTP surface and is not subject to this filter - it is a trusted, internal-only input by design, documented as such rather than left ambiguous
+- [x] `AuthController`
+- [x] Tests: standard controller/service tests, no Spring Integration involved
+
+### Notes on what was built
+
+- **JWT library**: jjwt 0.13.0 (`jjwt-api`, with `jjwt-impl` and `jjwt-jackson` at runtime), version held in a `pom.xml` property since the Boot BOM does not manage it. Tokens are HMAC-SHA signed, carry the email as subject, the roles (informative only) and an expiry.
+- **Configuration**: `app.jwt.secret` (`APP_JWT_SECRET`, at least 32 bytes, no default in `application.yml`: outside `dev` and `test` the application refuses to start without it), `app.jwt.expiration` (`1h`), `app.admin.email`/`app.admin.password` (`APP_ADMIN_EMAIL`/`APP_ADMIN_PASSWORD`, empty by default). `application-dev.yml`, `docker-compose.yml` and `.env.example` share one development secret; `application-test.yml` holds a fixed test secret. The admin variables are empty in docker-compose and commented out in `.env.example`: no default password anywhere.
+- **Responses**: register answers `201` with a `UserResponse` (id, names, email, roles), login `200` with an `AuthResponse` (`accessToken`, `tokenType: Bearer`, `expiresIn` in seconds), `me` `200` with the `UserResponse`. A taken email is a `BusinessRuleException` (`422`, consistent with the other business rules), invalid fields a `400`, wrong credentials a `401` with the same message whether the email exists or not, a disabled or locked account a `401`. A password longer than the 72 bytes BCrypt hashes (possible within 72 characters once multi-byte characters are used) is refused with a `422` instead of failing in the encoder; the same check gives a clear startup error for an oversized `APP_ADMIN_PASSWORD`.
+- **Emails** are trimmed and lower-cased on registration, login and admin creation, so the login is case-insensitive and `Jane@Example.com` cannot register twice.
+- **Security errors as `ApiResponse`**: the entry point (`401`) and the access denied handler (`403`) of `SecurityConfig` delegate to Spring MVC's `handlerExceptionResolver`, so `GlobalExceptionHandler` renders them like any other error; it gained an `AuthenticationException` handler for that.
+- **Login** goes through Spring Security's `AuthenticationManager` (a `DaoAuthenticationProvider` over a `UserDetailsService` bean declared in `SecurityConfig`, which maps the `User` entity to Spring's `UserDetails`, so the entity implements no security interface). Passwords use the delegating encoder (BCrypt, stored with its `{bcrypt}` prefix).
+- **`JwtAuthFilter`** is not a Spring bean (Spring Boot would also register it as a servlet filter): `SecurityConfig` creates it inside the chain. It reloads the account on every request, so a locked or deleted account or a changed role takes effect immediately; an invalid token leaves the request anonymous.
+- **Order routes**: `/api/v1/orders/*/approve` and `/api/v1/orders/*/reject` require `hasRole('ADMIN')` (any HTTP method), every other `/api/v1/orders/**` route an authenticated caller. `@EnableMethodSecurity` is on, for `@PreAuthorize` in later branches. The review endpoints themselves arrive with `feature/message-routing`.
+- **`AdminBootstrap`** is an `ApplicationRunner` delegating to `UserService.createAdminIfAbsent`; the admin account gets the `ADMIN` role only, with the names "Admin Account".
+- **Tests**: the MockMvc and security tests share the cached Spring context and run `@Transactional`, so the accounts they create are rolled back and the shared database stays empty. The repository tests are `@DataJpaTest` against the Testcontainers PostgreSQL (`replace = NONE`). The `403` rules are tested without any order controller: the URL rules reject a `USER` before dispatch.
 
 ## feature/order-intake
 
