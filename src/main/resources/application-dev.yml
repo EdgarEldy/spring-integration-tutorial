@@ -15,6 +15,12 @@ spring:
     # and only here, keeps demo rows out of every other profile: production never contains them.
     locations: classpath:db/migration,classpath:db/dev-data
 
+app:
+  jwt:
+    # Development-only signing secret, the same default as APP_JWT_SECRET in .env.example and
+    # docker-compose.yml. Any other environment must provide its own secret.
+    secret: ${APP_JWT_SECRET:dev-only-jwt-secret-change-me-at-least-32-bytes}
+
 management:
   endpoints:
     web:
