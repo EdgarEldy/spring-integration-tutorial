@@ -194,6 +194,13 @@ class AuthControllerTest {
                 .hasStatus(HttpStatus.UNAUTHORIZED);
     }
 
+    @Test
+    void _13_ShouldAnswer422Not500_WhenThePasswordFitsInCharactersButNotInBcryptBytes() {
+        assertThat(register("jane@example.com", "é".repeat(40)))
+                .hasStatus(HttpStatus.UNPROCESSABLE_CONTENT)
+                .bodyJson().extractingPath("$.message").isEqualTo("Password must not exceed 72 bytes");
+    }
+
     private void lock(String email) {
         // Through the managed entity rather than SQL: the test transaction's persistence context
         // already holds the account and would otherwise keep serving its stale, unlocked state.
