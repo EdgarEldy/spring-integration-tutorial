@@ -29,7 +29,7 @@ import org.springframework.integration.test.mock.MockIntegration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
-import org.springframework.messaging.MessageHandlingException;
+import org.springframework.messaging.MessagingException;
 import org.springframework.messaging.support.GenericMessage;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -126,11 +126,12 @@ class OrderIntakeFlowTest {
         long productId = data.product("12.50");
 
         // A step called through a channel reports its failure wrapped in a MessagingException that tells
-        // which message failed; the original exception is its cause.
+        // which message failed; the original exception is at the bottom of its cause chain (the retry advice
+        // of the persistence endpoint adds one more wrapper around the MessageHandlingException).
         assertThatThrownBy(() -> orderCommandChannel.send(
                 new GenericMessage<>(new OrderCommand(-1L, productId, 1, OrderSource.API))))
-                .isInstanceOf(MessageHandlingException.class)
-                .hasCauseInstanceOf(ResourceNotFoundException.class);
+                .isInstanceOf(MessagingException.class)
+                .hasRootCauseInstanceOf(ResourceNotFoundException.class);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM orders WHERE product_id = ?", Integer.class, productId))
                 .isZero();
     }
