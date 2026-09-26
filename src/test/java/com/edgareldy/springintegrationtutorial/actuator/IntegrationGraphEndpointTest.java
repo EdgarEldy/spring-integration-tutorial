@@ -35,14 +35,19 @@ class IntegrationGraphEndpointTest {
     private MockMvcTester mvc;
 
     @Test
-    void _01_ShouldDescribeTheIntakeChannelAndTheErrorChannel_WhenAnAnonymousCallerRequestsTheGraph() {
+    void _01_ShouldDescribeTheIntakeFlow_WhenAnAnonymousCallerRequestsTheGraph() {
         // IntegrationGraphServer walks every channel, endpoint and adapter registered in the context and
         // builds a graph of nodes and links; the endpoint serves it as JSON. errorChannel is declared by
-        // Spring Integration itself, intake-channel by IntegrationConfig.
+        // Spring Integration itself, the two channels by IntegrationConfig. An annotated component method
+        // gives an endpoint named <bean>.<method>.<annotation>, an annotated @Bean method <bean>.<annotation>.
         assertThat(mvc.get().uri("/actuator/integrationgraph"))
                 .hasStatusOk()
                 .bodyJson()
                 .satisfies(json -> json.assertThat().extractingPath("$.nodes[*].name").asArray()
-                        .contains(IntegrationConfig.INTAKE_CHANNEL, "errorChannel"));
+                        .contains(IntegrationConfig.INTAKE_CHANNEL, IntegrationConfig.ORDER_COMMAND_CHANNEL,
+                                "errorChannel",
+                                "incomingOrderLines.inboundChannelAdapter",
+                                "rawOrderTransformer.transform.transformer",
+                                "orderPersistenceActivator.persist.serviceActivator"));
     }
 }
