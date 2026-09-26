@@ -1,0 +1,57 @@
+package com.edgareldy.springintegrationtutorial.integration.error;
+
+import com.edgareldy.springintegrationtutorial.config.IntegrationConfig;
+import com.edgareldy.springintegrationtutorial.integration.message.LineOutcome;
+import com.edgareldy.springintegrationtutorial.integration.splitter.OrderFileSplitter;
+import org.springframework.core.NestedExceptionUtils;
+import org.springframework.integration.annotation.ServiceActivator;
+import org.springframework.integration.support.MessageBuilder;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.support.ErrorMessage;
+import org.springframework.stereotype.Component;
+
+/**
+ * Local error handling of the bulk file path: turns the failure of one line (malformed, unknown customer or
+ * product) into a failed {@link LineOutcome} for the aggregator, so it never reaches the global error
+ * channel and never keeps its file's report from being released.
+ * <p>
+ * Created edgar.muhamyangabo on 9/27/26
+ * Author : edgar.muhamyangabo
+ * Date : 9/27/26
+ * Project : spring-integration-tutorial
+ */
+@Component
+public class OrderLineErrorHandler {
+
+    /**
+     * @param errorMessage the failure caught by the per-line gateway
+     * @return the failed outcome, carrying the line's correlation headers
+     * @throws IllegalStateException if the failed line cannot be identified
+     */
+    // An ErrorMessage is the message Spring Integration builds for a failure: its payload is the exception,
+    // and its original message is the message that was being sent when it happened, here the split line as
+    // the gateway sent it, with the correlation id, sequence and line headers the aggregator needs. The
+    // outcome copies those headers, so the aggregator files it under the right file, exactly as it would a
+    // successful line.
+    @ServiceActivator(inputChannel = IntegrationConfig.ORDER_LINE_ERROR_CHANNEL,
+            outputChannel = IntegrationConfig.LINE_OUTCOME_CHANNEL)
+    public Message<LineOutcome> toFailedOutcome(ErrorMessage errorMessage) {
+        Throwable failure = errorMessage.getPayload();
+        Message<?> line = errorMessage.getOriginalMessage();
+        if (line == null && failure instanceof MessagingException messagingException) {
+            line = messagingException.getFailedMessage();
+        }
+        if (line == null) {
+            throw new IllegalStateException("Cannot identify the failed order line", failure);
+        }
+        Integer lineNumber = line.getHeaders().get(OrderFileSplitter.LINE_NUMBER_HEADER, Integer.class);
+        String content = line.getHeaders().get(OrderFileSplitter.LINE_HEADER, String.class);
+        // The exception reaching the gateway wraps the real one (a MessageHandlingException naming the failing
+        // endpoint); the report keeps the root cause, the part a person dropping the file can act on.
+        String reason = NestedExceptionUtils.getMostSpecificCause(failure).getMessage();
+        return MessageBuilder.withPayload(LineOutcome.failed(lineNumber == null ? 0 : lineNumber, content, reason))
+                .copyHeaders(line.getHeaders())
+                .build();
+    }
+}
