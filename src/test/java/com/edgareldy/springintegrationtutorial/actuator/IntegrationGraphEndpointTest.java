@@ -23,11 +23,12 @@ import org.springframework.test.web.servlet.assertj.MockMvcTester;
  */
 // The real dev profile is activated, so the test reads the exposure list from application-dev.yml
 // itself. Its localhost datasource is ignored: the @ServiceConnection of the Testcontainers
-// configuration takes precedence over spring.datasource.* properties.
+// configuration takes precedence over spring.datasource.* properties. The test profile comes last, so
+// its isolated directories win over the repository folders the dev profile would otherwise use.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
-@ActiveProfiles("dev")
+@ActiveProfiles({"dev", "test"})
 class IntegrationGraphEndpointTest {
 
     @Autowired
