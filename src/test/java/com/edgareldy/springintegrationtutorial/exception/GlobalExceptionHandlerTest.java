@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -115,6 +116,13 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().data()).containsEntry("orderIntakeRequest", "order is inconsistent");
     }
 
+    @Test
+    void _09_ShouldReturn400NamingTheParameter_WhenAPathVariableHasTheWrongType() {
+        assertThat(mvc.get().uri("/test/items/abc"))
+                .hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson().extractingPath("$.message").isEqualTo("Invalid value for parameter 'id'");
+    }
+
     /**
      * Request body with one constrained field.
      * <p>
@@ -156,6 +164,10 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/test/forbidden")
         void forbidden() {
             throw new AccessDeniedException("nope");
+        }
+
+        @GetMapping("/test/items/{id}")
+        void item(@PathVariable Long id) {
         }
 
         @GetMapping("/test/unexpected")
