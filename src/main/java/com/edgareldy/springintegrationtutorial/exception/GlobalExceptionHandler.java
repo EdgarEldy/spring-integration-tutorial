@@ -11,6 +11,9 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AccountStatusException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -89,6 +92,28 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
         return error(HttpStatus.FORBIDDEN, "Access denied");
+    }
+
+    /**
+     * A caller who is not authenticated: wrong credentials at login, or a protected route called
+     * without a valid token (forwarded here by the security entry point).
+     *
+     * @param ex the authentication failure
+     * @return a 401 error envelope
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAuthentication(AuthenticationException ex) {
+        String message;
+        if (ex instanceof BadCredentialsException) {
+            // Same message for an unknown email and a wrong password: the API never confirms that an
+            // account exists.
+            message = "Invalid email or password";
+        } else if (ex instanceof AccountStatusException) {
+            message = "Account is disabled or locked";
+        } else {
+            message = "Authentication required";
+        }
+        return error(HttpStatus.UNAUTHORIZED, message);
     }
 
     /**
