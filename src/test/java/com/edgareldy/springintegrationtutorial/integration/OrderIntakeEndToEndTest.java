@@ -7,11 +7,13 @@ import com.edgareldy.springintegrationtutorial.TestcontainersConfiguration;
 import com.edgareldy.springintegrationtutorial.support.CommerceTestData;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,6 +61,9 @@ class OrderIntakeEndToEndTest {
 
     @Value("${orders.directories.processed}")
     private Path processed;
+
+    @Value("${orders.directories.reports}")
+    private Path reports;
 
     private CommerceTestData data;
 
@@ -135,11 +140,27 @@ class OrderIntakeEndToEndTest {
 
         drop("unknown-customer.csv", "-1," + productId + ",1");
 
-        // No error handling exists yet in the file path: the failure goes to the default errorChannel,
-        // which logs it, and the file is not picked up again since it has already left the directory.
+        // The line fails locally (a failed outcome in the file's report, never the global errorChannel), and
+        // the file is not picked up again since it has already left the directory.
         await().atMost(TIMEOUT).until(() -> Files.exists(processed.resolve("unknown-customer.csv")));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM orders WHERE product_id = ?", Integer.class, productId))
                 .isZero();
+    }
+
+    @Test
+    void _06_ShouldWriteAReportListingEachFailedLine_WhenADroppedFileHoldsOnlyInvalidLines() throws IOException {
+        long customerId = data.customer();
+        String baseName = "invalid-" + UUID.randomUUID();
+
+        drop(baseName + ".csv", "not-an-order\n\n" + customerId + ",-1,2\n");
+
+        Path report = reports.resolve(baseName + "-report.txt");
+        await().atMost(TIMEOUT).until(() -> Files.exists(report));
+        assertThat(Files.readString(report, StandardCharsets.UTF_8))
+                .contains("Source file: " + baseName + ".csv", "Lines: 2", "Failed: 2",
+                        "line 1 [not-an-order]: Malformed order line",
+                        "line 3 [" + customerId + ",-1,2]: Product with id -1 not found");
+        assertThat(data.orderCount(customerId)).isZero();
     }
 
     // The totals used here are far under the review threshold: once persisted, the order continues through
