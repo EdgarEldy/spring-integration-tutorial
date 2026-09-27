@@ -70,6 +70,9 @@ class PostPersistenceFailureTest {
     @Value("${orders.directories.confirmations}")
     private Path confirmations;
 
+    @Value("${orders.directories.reports}")
+    private Path reports;
+
     @Value("${orders.directories.failed}")
     private Path failed;
 
@@ -80,7 +83,8 @@ class PostPersistenceFailureTest {
         data = new CommerceTestData(jdbc);
         unblockConfirmations();
         Files.createDirectories(failed);
-        RoutingTestDirectories.empty(incoming, failed);
+        Files.createDirectories(reports);
+        RoutingTestDirectories.empty(incoming, failed, reports);
         Files.createDirectories(processed);
     }
 
@@ -96,19 +100,23 @@ class PostPersistenceFailureTest {
         long productId = data.product("15.00");
         blockConfirmations();
 
-        drop("blocked.csv", customerId + "," + productId + ",2");
+        String line = customerId + "," + productId + ",2";
+        drop("blocked.csv", line);
 
         await().atMost(TIMEOUT).until(() -> data.orderCount(customerId) == 1
                 && "FAILED".equals(data.singleOrderOf(customerId).get("status")));
         long orderId = orderIdOf(customerId);
-        // The advice of the file writer records the failure, then the exception reaches errorChannel through
-        // the poller: during several polls, there must still be one dead letter only.
+        // The advice of the file writer records the failure, then the exception reaches the per-line error
+        // handler, which reports the line: during several polls, there must still be one dead letter only.
         await().during(Duration.ofMillis(500)).atMost(TIMEOUT).until(() -> deadLetters().size() == 1);
         assertThat(read(deadLetters().get(0)))
                 .startsWith("source-file: blocked.csv\norder-id: " + orderId + "\n")
                 .contains("\nreason: IllegalArgumentException: Destination path [")
                 .contains("does not point to a directory.\n")
-                .contains("\npayload:\norderId=" + orderId + "\nstatus=AUTO_CONFIRMED\n");
+                .endsWith("\npayload:\n" + line + "\n");
+        Path report = reports.resolve("blocked-report.txt");
+        await().atMost(TIMEOUT).until(() -> Files.exists(report));
+        assertThat(read(report)).contains("line 1 [" + line + "]: (order " + orderId + ") Destination path [");
     }
 
     @Test
