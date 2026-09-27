@@ -13,6 +13,7 @@ import com.edgareldy.springintegrationtutorial.entity.OrderSource;
 import com.edgareldy.springintegrationtutorial.entity.OrderStatus;
 import com.edgareldy.springintegrationtutorial.exception.ResourceNotFoundException;
 import com.edgareldy.springintegrationtutorial.integration.message.OrderCommand;
+import com.edgareldy.springintegrationtutorial.integration.splitter.OrderFileSplitter;
 import com.edgareldy.springintegrationtutorial.service.OrderService;
 import java.io.File;
 import java.math.BigDecimal;
@@ -165,6 +166,20 @@ class OrderErrorHandlerTest {
 
         assertThat(deadLetters.receive(0)).isNull();
         verifyNoInteractions(orderService);
+    }
+
+    @Test
+    void _10_ShouldWriteTheRawLineOfTheDroppedFile_WhenTheFailedMessageCarriesIt() {
+        Message<String> failed = MessageBuilder.withPayload("orderId=7\nstatus=AUTO_CONFIRMED\n")
+                .setHeader(OrderFileSplitter.LINE_HEADER, "3,4,5")
+                .setHeader(FileHeaders.ORIGINAL_FILE, new File("processed/orders.csv"))
+                .setHeader(IntegrationConfig.ORDER_ID_HEADER, 7L).build();
+
+        handler.recordFailure(failed, new IllegalStateException("boom"));
+
+        assertThat((String) nextDeadLetter().getPayload())
+                .startsWith("source-file: orders.csv\norder-id: 7\n")
+                .endsWith("\npayload:\n3,4,5\n");
     }
 
     private Message<?> nextDeadLetter() {
