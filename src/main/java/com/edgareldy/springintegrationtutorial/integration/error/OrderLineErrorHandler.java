@@ -15,7 +15,8 @@ import org.springframework.stereotype.Component;
 /**
  * Local error handling of the bulk file path: turns the failure of one line (malformed, unknown customer or
  * product) into a failed {@link LineOutcome} for the aggregator, so it never reaches the global error
- * channel and never keeps its file's report from being released.
+ * channel and never keeps its file's report from being released. A line failing after persistence or
+ * after exhausted retries also gets the failure rule of {@link OrderErrorHandler}.
  * <p>
  * Created edgar.muhamyangabo on 9/27/26
  * Author : edgar.muhamyangabo
@@ -24,6 +25,15 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class OrderLineErrorHandler {
+
+    private final OrderErrorHandler orderErrorHandler;
+
+    /**
+     * @param orderErrorHandler applies the failure rule (dead letter, {@code FAILED}) to the lines it concerns
+     */
+    public OrderLineErrorHandler(OrderErrorHandler orderErrorHandler) {
+        this.orderErrorHandler = orderErrorHandler;
+    }
 
     /**
      * @param errorMessage the failure caught by the per-line gateway
@@ -53,11 +63,31 @@ public class OrderLineErrorHandler {
         // The exception reaching the gateway wraps the real one (a MessageHandlingException naming the failing
         // endpoint); the report keeps the root cause, the part a person dropping the file can act on.
         String reason = NestedExceptionUtils.getMostSpecificCause(failure).getMessage();
-        LineOutcome outcome = LineOutcome.failed(lineNumber == null ? 0 : lineNumber, content,
-                orderIdOf(failure), reason);
+        Long orderId = orderIdOf(failure);
+        recordIfNeeded(failure, orderId, line);
+        LineOutcome outcome = LineOutcome.failed(lineNumber == null ? 0 : lineNumber, content, orderId, reason);
         return MessageBuilder.withPayload(outcome)
                 .copyHeaders(line.getHeaders())
                 .build();
+    }
+
+    // On top of its failed entry in the report, a line gets the failure rule of the flow (dead letter, FAILED
+    // when its order exists) when it failed after persistence (an order id is known) or because persistence
+    // kept failing after its retries. A line refused before persistence (malformed, unknown customer or
+    // product) is only a failed entry of the report: nothing was created, and the report says why.
+    // A failure of a step after persistence was already recorded by OrderFailureRecordingAdvice before it
+    // reached this handler: it is not recorded twice.
+    private void recordIfNeeded(Throwable failure, Long orderId, Message<?> line) {
+        if (OrderErrorHandler.alreadyRecorded(failure)) {
+            return;
+        }
+        if (orderId != null || IntegrationConfig.isRetriedPersistenceFailure(failure)) {
+            Message<?> failedMessage = failure instanceof MessagingException messagingException
+                    && messagingException.getFailedMessage() != null
+                    ? messagingException.getFailedMessage()
+                    : line;
+            orderErrorHandler.recordFailure(failedMessage, failure);
+        }
     }
 
     // The failed message of the exception is the one the failing endpoint was handling. Once the order is
