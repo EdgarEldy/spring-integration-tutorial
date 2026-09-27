@@ -6,6 +6,7 @@ import com.edgareldy.springintegrationtutorial.entity.OrderStatus;
 import com.edgareldy.springintegrationtutorial.exception.ResourceNotFoundException;
 import com.edgareldy.springintegrationtutorial.integration.adapter.DeadLetterOutboundAdapterConfig;
 import com.edgareldy.springintegrationtutorial.integration.message.OrderCommand;
+import com.edgareldy.springintegrationtutorial.integration.splitter.OrderFileSplitter;
 import com.edgareldy.springintegrationtutorial.service.OrderService;
 import java.io.File;
 import java.nio.file.Path;
@@ -28,8 +29,9 @@ import org.springframework.stereotype.Component;
 /**
  * The failure rule of the order flows, in one place: {@link #recordFailure} sets an existing order to
  * {@code FAILED} and sends a dead letter (failed payload plus reason) to the dead-letter channel. It is
- * applied to every failure published on {@code errorChannel} and, through
- * {@link OrderFailureRecordingAdvice}, to the steps that run after persistence.
+ * applied to every failure published on {@code errorChannel}, to the steps that run after persistence
+ * (through {@link OrderFailureRecordingAdvice}) and to the lines of a dropped file that fail after
+ * persistence or after exhausted retries (through {@link OrderLineErrorHandler}).
  * <p>
  * Created edgar.muhamyangabo on 9/27/26
  * Author : edgar.muhamyangabo
@@ -74,8 +76,10 @@ public class OrderErrorHandler {
     // Spring Integration registers it by default, as a publish-subscribe channel whose only subscriber
     // logs the error: this activator becomes a second subscriber, and the log stays.
     // A synchronous call never reaches it: the HTTP gateway runs the flow in the request thread and gets
-    // the exception back, and a bulk line failure is handled by the aggregator path before it could escape
-    // the flow.
+    // the exception back. Neither does a line of a dropped file: the per-line gateway sends its failures to
+    // its own error channel (OrderLineErrorHandler), so the line is reported and its file's group released.
+    // What is left for errorChannel is a failure of the file itself, outside any line: reading or moving the
+    // dropped file, aggregating its outcomes or writing its report.
     @ServiceActivator(inputChannel = IntegrationContextUtils.ERROR_CHANNEL_BEAN_NAME)
     public void handle(ErrorMessage errorMessage) {
         Throwable failure = errorMessage.getPayload();
@@ -107,7 +111,8 @@ public class OrderErrorHandler {
      * </pre>
      * {@code source-file} is the dropped file the order came from, {@code none} for an HTTP order, and
      * {@code order-id} is {@code none} when the failure happened before persistence. The payload is the
-     * failed message's payload: the raw line before the transformer, an {@link OrderCommand} written back
+     * text of the dropped file's line when the message carries it ({@code order_line} header), otherwise
+     * the failed message's payload: the raw input before the transformer, an {@link OrderCommand} written back
      * as its {@code customerId,productId,quantity} line (it can be dropped into the incoming directory
      * again once the cause is fixed), an {@link Order} as {@code key=value} lines, or the outbound file
      * content. The file is named {@code <source-file or order-<id>>.<unique id>.failed}.
@@ -195,6 +200,12 @@ public class OrderErrorHandler {
     private static String payloadOf(Message<?> failedMessage) {
         if (failedMessage == null) {
             return "(unavailable)";
+        }
+        // A line of a dropped file carries its own text all the way through the flow: that raw line is the
+        // most useful payload, whatever step failed, since it can be dropped again once the cause is fixed.
+        String line = failedMessage.getHeaders().get(OrderFileSplitter.LINE_HEADER, String.class);
+        if (line != null) {
+            return line;
         }
         Object payload = failedMessage.getPayload();
         if (payload instanceof OrderCommand command) {
