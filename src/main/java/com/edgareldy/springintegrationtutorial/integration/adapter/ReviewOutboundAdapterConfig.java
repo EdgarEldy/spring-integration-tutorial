@@ -68,9 +68,14 @@ public class ReviewOutboundAdapterConfig {
     /**
      * @return the writer of the review-queue entries
      */
+    // Replies with the written entry on review-written-channel, like the confirmation writer: for a line of a
+    // bulk file, that reply becomes the line's pending review outcome.
     @Bean
     @ServiceActivator(inputChannel = IntegrationConfig.REVIEW_FILE_CHANNEL)
     public FileWritingMessageHandler reviewFileWriter() {
-        return OrderFiles.writer(reviewsDirectory);
+        FileWritingMessageHandler writer = OrderFiles.writer(reviewsDirectory);
+        writer.setExpectReply(true);
+        writer.setOutputChannelName(IntegrationConfig.REVIEW_WRITTEN_CHANNEL);
+        return writer;
     }
 }

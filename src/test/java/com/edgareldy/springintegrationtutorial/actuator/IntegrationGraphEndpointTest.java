@@ -73,4 +73,23 @@ class IntegrationGraphEndpointTest {
                                 "rejectionFileWriter.serviceActivator",
                                 "reviewDecisionActivator.resolve.serviceActivator"));
     }
+
+    @Test
+    void _03_ShouldDescribeTheBulkFilePath_WhenAnAnonymousCallerRequestsTheGraph() {
+        assertThat(mvc.get().uri("/actuator/integrationgraph"))
+                .hasStatusOk()
+                .bodyJson()
+                .satisfies(json -> json.assertThat().extractingPath("$.nodes[*].name").asArray()
+                        .contains(IntegrationConfig.ORDER_FILE_CHANNEL, IntegrationConfig.ORDER_LINE_CHANNEL,
+                                IntegrationConfig.ORDER_LINE_ERROR_CHANNEL, IntegrationConfig.LINE_OUTCOME_CHANNEL,
+                                IntegrationConfig.REPORT_CHANNEL, IntegrationConfig.CONFIRMATION_WRITTEN_CHANNEL,
+                                IntegrationConfig.REVIEW_WRITTEN_CHANNEL,
+                                "orderFileSplitter.split.splitter",
+                                "orderLineActivator.dispatch.serviceActivator",
+                                "orderLineErrorHandler.toFailedOutcome.serviceActivator",
+                                "lineOutcomeActivator.confirmed.serviceActivator",
+                                "lineOutcomeActivator.queuedForReview.serviceActivator",
+                                "orderFileAggregator.aggregate.aggregator",
+                                "reportWriter.serviceActivator"));
+    }
 }

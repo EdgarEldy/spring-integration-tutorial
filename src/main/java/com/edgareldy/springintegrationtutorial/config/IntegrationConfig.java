@@ -97,6 +97,45 @@ public class IntegrationConfig {
     public static final String REJECTION_REASON_HEADER = "rejectionReason";
 
     /**
+     * Name of the channel carrying the whole content of each dropped file from the file adapter to the
+     * bulk splitter.
+     */
+    public static final String ORDER_FILE_CHANNEL = "order-file-channel";
+
+    /**
+     * Name of the channel carrying each non-blank line of a file, split out and correlated to its file.
+     */
+    public static final String ORDER_LINE_CHANNEL = "order-line-channel";
+
+    /**
+     * Name of the error channel of the per-line gateway: where a line that failed in the shared flow
+     * (malformed, unknown customer or product) is turned into a failed outcome.
+     */
+    public static final String ORDER_LINE_ERROR_CHANNEL = "order-line-error-channel";
+
+    /**
+     * Name of the channel carrying every per-line outcome, success or failure, to the bulk aggregator.
+     */
+    public static final String LINE_OUTCOME_CHANNEL = "line-outcome-channel";
+
+    /**
+     * Name of the channel carrying each released file report to the report writer.
+     */
+    public static final String REPORT_CHANNEL = "report-channel";
+
+    /**
+     * Name of the channel carrying each written confirmation file (the writer's reply) to the step turning
+     * a bulk line's confirmation into its outcome.
+     */
+    public static final String CONFIRMATION_WRITTEN_CHANNEL = "confirmation-written-channel";
+
+    /**
+     * Name of the channel carrying each written review-queue entry (the writer's reply) to the step turning
+     * a bulk line's review into its outcome.
+     */
+    public static final String REVIEW_WRITTEN_CHANNEL = "review-written-channel";
+
+    /**
      * @return the shared intake channel
      */
     // A DirectChannel hands each message to its single subscriber in the sender's own thread, like a
@@ -205,6 +244,65 @@ public class IntegrationConfig {
      */
     @Bean(REVIEW_DECISION_CHANNEL)
     public DirectChannel reviewDecisionChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the channel between the file adapter and the splitter
+     */
+    // The bulk file path stays synchronous from end to end: the poller thread reads a file, splits it, runs
+    // every line through the shared flow and writes the report before the next poll. Each of its channels is
+    // therefore a DirectChannel too, and a file's report exists as soon as the poll that read it is over.
+    @Bean(ORDER_FILE_CHANNEL)
+    public DirectChannel orderFileChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the channel between the splitter and the per-line dispatch
+     */
+    @Bean(ORDER_LINE_CHANNEL)
+    public DirectChannel orderLineChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the error channel of the per-line gateway
+     */
+    @Bean(ORDER_LINE_ERROR_CHANNEL)
+    public DirectChannel orderLineErrorChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the channel feeding the aggregator
+     */
+    @Bean(LINE_OUTCOME_CHANNEL)
+    public DirectChannel lineOutcomeChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the channel between the aggregator and the report writer
+     */
+    @Bean(REPORT_CHANNEL)
+    public DirectChannel reportChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the channel after the confirmation file writer
+     */
+    @Bean(CONFIRMATION_WRITTEN_CHANNEL)
+    public DirectChannel confirmationWrittenChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the channel after the review-queue file writer
+     */
+    @Bean(REVIEW_WRITTEN_CHANNEL)
+    public DirectChannel reviewWrittenChannel() {
         return new DirectChannel();
     }
 
