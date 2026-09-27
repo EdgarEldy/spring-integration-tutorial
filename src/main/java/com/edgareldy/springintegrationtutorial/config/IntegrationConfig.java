@@ -1,6 +1,7 @@
 package com.edgareldy.springintegrationtutorial.config;
 
 import java.time.Duration;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -101,6 +102,14 @@ public class IntegrationConfig {
      * Header carrying the administrator's reason on a rejected order.
      */
     public static final String REJECTION_REASON_HEADER = "rejectionReason";
+
+    /**
+     * The failures the persistence step retries (transient database errors), declared once for the retry
+     * policy and for the error handlers that need to tell a failure after exhausted retries apart.
+     */
+    public static final List<Class<? extends Throwable>> RETRIED_PERSISTENCE_FAILURES = List.of(
+            TransientDataAccessException.class, RecoverableDataAccessException.class,
+            CannotCreateTransactionException.class);
 
     /**
      * Name of the channel carrying the whole content of each dropped file from the file adapter to the
@@ -342,10 +351,25 @@ public class IntegrationConfig {
                 // The policy counts retries, which come after the first attempt.
                 .maxRetries(maxAttempts - 1L)
                 .delay(retryDelay)
-                .includes(TransientDataAccessException.class, RecoverableDataAccessException.class,
-                        CannotCreateTransactionException.class)
+                .includes(RETRIED_PERSISTENCE_FAILURES)
                 .build());
         return advice;
+    }
+
+    /**
+     * @param failure a failure of the flow
+     * @return whether it is one the persistence retry advice retries, found anywhere in its cause chain: when
+     *         it still escapes the persistence step, its retries were exhausted
+     */
+    public static boolean isRetriedPersistenceFailure(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            for (Class<? extends Throwable> type : RETRIED_PERSISTENCE_FAILURES) {
+                if (type.isInstance(cause)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
