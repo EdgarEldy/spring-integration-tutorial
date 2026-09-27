@@ -3,11 +3,11 @@ package com.edgareldy.springintegrationtutorial.integration.aggregator;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.edgareldy.springintegrationtutorial.integration.message.LineOutcome;
+import com.edgareldy.springintegrationtutorial.integration.splitter.OrderFileSplitter;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.integration.IntegrationMessageHeaderAccessor;
-import org.springframework.integration.file.FileHeaders;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.messaging.Message;
 
@@ -87,9 +87,16 @@ class OrderFileAggregatorTest {
         assertThat(aggregator.aggregate(List.of(anonymous))).contains("Source file: unknown");
     }
 
+    @Test
+    void _07_ShouldNameTheOrder_WhenALineFailedAfterItsOrderWasPersisted() {
+        String report = aggregator.aggregate(List.of(outcome(LineOutcome.failed(1, "1,2,2", 42L, "Disk full"), 1)));
+
+        assertThat(report).contains("line 1 [1,2,2]: (order 42) Disk full");
+    }
+
     private static Message<LineOutcome> outcome(LineOutcome outcome, int sequenceSize) {
         return MessageBuilder.withPayload(outcome)
-                .setHeader(FileHeaders.FILENAME, "orders.csv")
+                .setHeader(OrderFileSplitter.SOURCE_FILE_HEADER, "orders.csv")
                 .setHeader(IntegrationMessageHeaderAccessor.SEQUENCE_SIZE, sequenceSize)
                 .build();
     }
