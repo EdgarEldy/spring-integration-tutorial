@@ -1,12 +1,12 @@
 package com.edgareldy.springintegrationtutorial.integration.adapter;
 
 import com.edgareldy.springintegrationtutorial.config.IntegrationConfig;
+import com.edgareldy.springintegrationtutorial.integration.splitter.OrderFileSplitter;
 import java.nio.file.Path;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.integration.annotation.ServiceActivator;
-import org.springframework.integration.file.FileHeaders;
 import org.springframework.integration.file.outbound.FileWritingMessageHandler;
 import org.springframework.integration.file.support.FileExistsMode;
 import org.springframework.messaging.Message;
@@ -30,11 +30,8 @@ public class ReportOutboundAdapterConfig {
      * @param reportsDirectory where reports are written ({@code orders.directories.reports})
      * @return the handler writing one report file per source file
      */
-    // FileWritingMessageHandler is Spring Integration's file outbound handler: it writes a message's payload
-    // (a String here, encoded as UTF-8) to a file of the configured directory, the file name coming from a
-    // FileNameGenerator. Registered with @ServiceActivator on a @Bean method, the handler itself becomes the
-    // endpoint subscribed to the report channel: this is the outbound Channel Adapter of the EIP catalog,
-    // connecting a channel to something outside the messaging system.
+    // The same kind of file writer as the order files, with its own file name generator: the report is named
+    // after the source file, which the aggregated message still carries in the splitter's source file header.
     @Bean
     @ServiceActivator(inputChannel = IntegrationConfig.REPORT_CHANNEL)
     public FileWritingMessageHandler reportWriter(@Value("${orders.directories.reports}") Path reportsDirectory) {
@@ -45,15 +42,13 @@ public class ReportOutboundAdapterConfig {
         // A file dropped again under the same name gets a fresh report, as its content replaced the earlier
         // copy in processed/.
         handler.setFileExistsMode(FileExistsMode.REPLACE);
-        // By default the handler writes under a temporary name (".writing" suffix) and renames the file once
-        // complete: whoever watches the reports directory never reads a half-written report.
         // Writing the report is the end of the file path: nothing is sent on.
         handler.setExpectReply(false);
         return handler;
     }
 
     private static String reportName(Message<?> message) {
-        String fileName = message.getHeaders().get(FileHeaders.FILENAME, String.class);
+        String fileName = message.getHeaders().get(OrderFileSplitter.SOURCE_FILE_HEADER, String.class);
         if (fileName == null || fileName.isBlank()) {
             fileName = "unknown" + CSV_EXTENSION;
         }
