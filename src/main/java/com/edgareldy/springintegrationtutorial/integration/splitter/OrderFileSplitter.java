@@ -4,6 +4,7 @@ import com.edgareldy.springintegrationtutorial.config.IntegrationConfig;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.integration.annotation.Splitter;
+import org.springframework.integration.file.FileHeaders;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
@@ -32,10 +33,16 @@ public class OrderFileSplitter {
      */
     public static final String LINE_HEADER = "order_line";
 
+    /**
+     * Header holding the name of the file a line comes from. The file adapter's {@code file_name} header is
+     * not enough: the outbound adapters of the routing flow reuse it to name the order file they write.
+     */
+    public static final String SOURCE_FILE_HEADER = "order_source_file";
+
     private static final char BYTE_ORDER_MARK = '﻿';
 
     /**
-     * @param content the whole text of one order file
+     * @param file the whole text of one order file, with the file adapter's headers
      * @return one message per non-blank line, in file order; an empty list for a file without any line
      */
     // A @Splitter endpoint calls this method with each incoming message and sends every element of the
@@ -48,7 +55,9 @@ public class OrderFileSplitter {
     // still adds the correlation headers to them.
     @Splitter(inputChannel = IntegrationConfig.ORDER_FILE_CHANNEL,
             outputChannel = IntegrationConfig.ORDER_LINE_CHANNEL)
-    public List<Message<String>> split(String content) {
+    public List<Message<String>> split(Message<String> file) {
+        String content = file.getPayload();
+        String sourceFile = file.getHeaders().get(FileHeaders.FILENAME, String.class);
         // A byte order mark belongs to the file, not to its first line.
         String text = !content.isEmpty() && content.charAt(0) == BYTE_ORDER_MARK ? content.substring(1) : content;
         String[] lines = text.split("\\R", -1);
@@ -61,6 +70,7 @@ public class OrderFileSplitter {
             parts.add(MessageBuilder.withPayload(line)
                     .setHeader(LINE_NUMBER_HEADER, index + 1)
                     .setHeader(LINE_HEADER, line.strip())
+                    .setHeader(SOURCE_FILE_HEADER, sourceFile)
                     .build());
         }
         return parts;
