@@ -107,8 +107,9 @@ class SecurityConfigTest {
         userService.createAdminIfAbsent("admin@example.com", "admin-password");
         String token = tokenOf("admin@example.com");
 
-        // The review endpoints arrive with feature/message-routing: whatever they answer, the security
-        // layer must neither ask for credentials nor refuse the ADMIN role.
+        // Order 1 may or may not exist, or be pending review, in the shared database: whatever the review
+        // endpoint answers (200, 404, 422), the security layer must neither ask for credentials nor refuse
+        // the ADMIN role.
         MvcTestResult result = mvc.post().uri("/api/v1/orders/1/approve")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange();
 

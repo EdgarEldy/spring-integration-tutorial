@@ -6,7 +6,6 @@ import com.edgareldy.springintegrationtutorial.integration.message.OrderCommand;
 import com.edgareldy.springintegrationtutorial.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.integration.annotation.ServiceActivator;
-import org.springframework.integration.context.IntegrationContextUtils;
 import org.springframework.stereotype.Component;
 
 /**
@@ -31,13 +30,11 @@ public class OrderPersistenceActivator {
     // A @ServiceActivator connects a channel to a plain bean method: the business logic (OrderService) knows
     // nothing about messages, and this thin adapter is the only thing the flow sees. A non-null return value
     // becomes the payload of the next message, sent to the output channel.
-    // The output is the persisted order, not the command, because the next step (the content-based router
-    // of the routing feature) decides on the stored total snapshot. Until that router exists, the order is
-    // sent to nullChannel, a channel Spring Integration always registers that silently discards every
-    // message: without an output channel, the endpoint would fail looking for a reply channel that neither
-    // the gateway (its method returns void) nor the file adapter ever provides.
+    // The output is the persisted order, not the command, because the next step, the content-based router,
+    // decides on the stored total snapshot. Persistence therefore happens exactly once, here, whichever
+    // branch the router then picks: every branch only updates the status of an order that already exists.
     @ServiceActivator(inputChannel = IntegrationConfig.ORDER_COMMAND_CHANNEL,
-            outputChannel = IntegrationContextUtils.NULL_CHANNEL_BEAN_NAME)
+            outputChannel = IntegrationConfig.PERSISTED_ORDER_CHANNEL)
     public Order persist(OrderCommand command) {
         return orderService.receive(command);
     }

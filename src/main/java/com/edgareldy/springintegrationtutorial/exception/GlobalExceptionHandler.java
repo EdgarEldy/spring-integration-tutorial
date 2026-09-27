@@ -18,6 +18,7 @@ import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
  * Translates every exception escaping a controller into an {@link ApiResponse} error, so a client
@@ -81,6 +82,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleUnreadable(HttpMessageNotReadableException ex) {
         return error(HttpStatus.BAD_REQUEST, "Malformed request body");
+    }
+
+    /**
+     * A path variable or request parameter that cannot be converted to its declared type, such as a
+     * non-numeric order id.
+     *
+     * @param ex the conversion failure
+     * @return a 400 error envelope naming the parameter
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return error(HttpStatus.BAD_REQUEST, "Invalid value for parameter '" + ex.getName() + "'");
     }
 
     /**

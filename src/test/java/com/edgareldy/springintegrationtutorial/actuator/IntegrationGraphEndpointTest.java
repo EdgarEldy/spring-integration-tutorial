@@ -50,4 +50,27 @@ class IntegrationGraphEndpointTest {
                                 "rawOrderTransformer.transform.transformer",
                                 "orderPersistenceActivator.persist.serviceActivator"));
     }
+
+    @Test
+    void _02_ShouldDescribeTheRoutingAndReviewFlow_WhenAnAnonymousCallerRequestsTheGraph() {
+        assertThat(mvc.get().uri("/actuator/integrationgraph"))
+                .hasStatusOk()
+                .bodyJson()
+                .satisfies(json -> json.assertThat().extractingPath("$.nodes[*].name").asArray()
+                        .contains(IntegrationConfig.PERSISTED_ORDER_CHANNEL, IntegrationConfig.AUTO_CONFIRM_CHANNEL,
+                                IntegrationConfig.MANUAL_REVIEW_CHANNEL, IntegrationConfig.CONFIRMATION_CHANNEL,
+                                IntegrationConfig.CONFIRMATION_FILE_CHANNEL, IntegrationConfig.REVIEW_QUEUE_CHANNEL,
+                                IntegrationConfig.REVIEW_FILE_CHANNEL, IntegrationConfig.REJECTION_CHANNEL,
+                                IntegrationConfig.REJECTION_FILE_CHANNEL, IntegrationConfig.REVIEW_DECISION_CHANNEL,
+                                "orderValueRouter.route.router",
+                                "confirmationOutboundAdapterConfig.autoConfirm.serviceActivator",
+                                "confirmationOutboundAdapterConfig.toConfirmationFile.transformer",
+                                "confirmationFileWriter.serviceActivator",
+                                "reviewOutboundAdapterConfig.queueForReview.serviceActivator",
+                                "reviewOutboundAdapterConfig.toReviewEntry.transformer",
+                                "reviewFileWriter.serviceActivator",
+                                "rejectionOutboundAdapterConfig.toRejectionFile.transformer",
+                                "rejectionFileWriter.serviceActivator",
+                                "reviewDecisionActivator.resolve.serviceActivator"));
+    }
 }

@@ -88,7 +88,7 @@ class OrderIntakeEndToEndTest {
                         """.formatted(customerId, productId)))
                 .hasStatus(HttpStatus.ACCEPTED);
 
-        assertReceivedOrder(customerId, productId, 3, "45.00", "API");
+        assertAutoConfirmedOrder(customerId, productId, 3, "45.00", "API");
     }
 
     @Test
@@ -99,7 +99,7 @@ class OrderIntakeEndToEndTest {
         drop("order-1.csv", customerId + "," + productId + ",2\n");
 
         await().atMost(TIMEOUT).until(() -> data.orderCount(customerId) == 1);
-        assertReceivedOrder(customerId, productId, 2, "30.00", "FILE");
+        assertAutoConfirmedOrder(customerId, productId, 2, "30.00", "FILE");
         await().atMost(TIMEOUT).until(() -> Files.exists(processed.resolve("order-1.csv")));
         assertThat(incoming.resolve("order-1.csv")).doesNotExist();
     }
@@ -142,11 +142,16 @@ class OrderIntakeEndToEndTest {
                 .isZero();
     }
 
-    private void assertReceivedOrder(long customerId, long productId, int quantity, String total, String source) {
-        Map<String, Object> order = data.singleOrderOf(customerId);
-        assertThat(order).containsEntry("product_id", productId).containsEntry("quantity", quantity)
-                .containsEntry("source", source).containsEntry("status", "RECEIVED");
-        assertThat((BigDecimal) order.get("total")).isEqualByComparingTo(total);
+    // The totals used here are far under the review threshold: once persisted, the order continues through
+    // the router to the auto-confirm path, whichever source it came from. For a file, that happens in the
+    // poller thread, a moment after the row appears: the assertion is retried until it holds.
+    private void assertAutoConfirmedOrder(long customerId, long productId, int quantity, String total, String source) {
+        await().atMost(TIMEOUT).untilAsserted(() -> {
+            Map<String, Object> order = data.singleOrderOf(customerId);
+            assertThat(order).containsEntry("product_id", productId).containsEntry("quantity", quantity)
+                    .containsEntry("source", source).containsEntry("status", "AUTO_CONFIRMED");
+            assertThat((BigDecimal) order.get("total")).isEqualByComparingTo(total);
+        });
     }
 
     // Written under a temporary name the *.csv filter ignores, then renamed: the poller can never read a

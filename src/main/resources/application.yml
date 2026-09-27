@@ -15,6 +15,9 @@ spring:
     enabled: true
 
 orders:
+  # Order total from which the content-based router (OrderValueRouter) sends an order to manual review
+  # instead of confirming it automatically: under it, auto-confirmed; at or above it, pending review.
+  review-threshold: 1000.00
   # Every directory the flows read from or write to. Relative paths resolve against the working
   # directory; docker-compose overrides them with ORDERS_DIRECTORIES_* environment variables
   # (relaxed binding) pointing at the mounted volumes. The sub-directories follow their parent,

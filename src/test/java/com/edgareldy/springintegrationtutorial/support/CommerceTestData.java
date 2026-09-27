@@ -59,11 +59,19 @@ public final class CommerceTestData {
 
     /**
      * @param customerId a customer with exactly one order
-     * @return that order's row (product_id, quantity, total, source, status)
+     * @return that order's row (id, product_id, quantity, total, source, status)
      */
     public Map<String, Object> singleOrderOf(long customerId) {
         return jdbc.queryForMap(
-                "SELECT product_id, quantity, total, source, status FROM orders WHERE customer_id = ?", customerId);
+                "SELECT id, product_id, quantity, total, source, status FROM orders WHERE customer_id = ?", customerId);
+    }
+
+    /**
+     * @param orderId an order
+     * @return its current status
+     */
+    public String statusOf(long orderId) {
+        return jdbc.queryForObject("SELECT status FROM orders WHERE id = ?", String.class, orderId);
     }
 
     private static String unique() {
