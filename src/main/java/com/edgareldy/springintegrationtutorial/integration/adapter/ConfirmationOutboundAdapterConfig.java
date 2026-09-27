@@ -75,9 +75,15 @@ public class ConfirmationOutboundAdapterConfig {
      */
     // @ServiceActivator on a @Bean returning a MessageHandler subscribes that ready-made handler to the input
     // channel: the endpoint is named after the bean, confirmationFileWriter.serviceActivator.
+    // Unlike the other writers, it replies with the written file (headers kept) on confirmation-written-channel:
+    // for a line of a bulk file, that reply becomes the line's auto-confirmed outcome, only once the file exists.
     @Bean
     @ServiceActivator(inputChannel = IntegrationConfig.CONFIRMATION_FILE_CHANNEL)
     public FileWritingMessageHandler confirmationFileWriter() {
-        return OrderFiles.writer(confirmationsDirectory);
+        FileWritingMessageHandler writer = OrderFiles.writer(confirmationsDirectory);
+        writer.setExpectReply(true);
+        // A ready-made handler declared as a @Bean takes its output channel itself, not from the annotation.
+        writer.setOutputChannelName(IntegrationConfig.CONFIRMATION_WRITTEN_CHANNEL);
+        return writer;
     }
 }
