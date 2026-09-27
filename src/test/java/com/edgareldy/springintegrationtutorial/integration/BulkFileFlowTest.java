@@ -101,7 +101,8 @@ class BulkFileFlowTest {
         assertThat(lines).allSatisfy(line -> assertThat(line.getHeaders())
                 .containsEntry(IntegrationMessageHeaderAccessor.CORRELATION_ID, file.getHeaders().getId())
                 .containsEntry(IntegrationMessageHeaderAccessor.SEQUENCE_SIZE, 3)
-                .containsEntry(FileHeaders.FILENAME, "split.csv"));
+                .containsEntry(FileHeaders.FILENAME, "split.csv")
+                .containsEntry(OrderFileSplitter.SOURCE_FILE_HEADER, "split.csv"));
         assertThat(lines).extracting(line -> line.getHeaders().get(IntegrationMessageHeaderAccessor.SEQUENCE_NUMBER))
                 .containsExactly(1, 2, 3);
         assertThat(lines).extracting(line -> line.getHeaders().get(OrderFileSplitter.LINE_NUMBER_HEADER))
@@ -129,7 +130,7 @@ class BulkFileFlowTest {
         lineOutcomeChannel.send(outcome(LineOutcome.pendingReview(4, "1,3,1", 11L), correlationId, 3, 3));
 
         assertThat(captor.getAllValues()).singleElement().satisfies(report -> {
-            assertThat(report.getHeaders()).containsEntry(FileHeaders.FILENAME, "mixed.csv");
+            assertThat(report.getHeaders()).containsEntry(OrderFileSplitter.SOURCE_FILE_HEADER, "mixed.csv");
             assertThat((String) report.getPayload()).contains("Lines: 3", "Auto-confirmed: 1", "Pending review: 1",
                     "Failed: 1", "line 2 [x]: Malformed order line 'x'");
         });
@@ -154,7 +155,7 @@ class BulkFileFlowTest {
         String baseName = "report-" + UUID.randomUUID();
 
         reportChannel.send(MessageBuilder.withPayload("Order file report\nLines: 1\n")
-                .setHeader(FileHeaders.FILENAME, baseName + ".csv").build());
+                .setHeader(OrderFileSplitter.SOURCE_FILE_HEADER, baseName + ".csv").build());
 
         Path report = reports.resolve(baseName + "-report.txt");
         assertThat(report).exists();
@@ -213,7 +214,7 @@ class BulkFileFlowTest {
     private static Message<LineOutcome> outcome(LineOutcome outcome, String correlationId, int sequenceNumber,
             int sequenceSize) {
         return MessageBuilder.withPayload(outcome)
-                .setHeader(FileHeaders.FILENAME, "mixed.csv")
+                .setHeader(OrderFileSplitter.SOURCE_FILE_HEADER, "mixed.csv")
                 .setCorrelationId(correlationId)
                 .setSequenceNumber(sequenceNumber)
                 .setSequenceSize(sequenceSize)
