@@ -124,6 +124,18 @@ public class IntegrationConfig {
     public static final String REPORT_CHANNEL = "report-channel";
 
     /**
+     * Name of the channel carrying each written confirmation file (the writer's reply) to the step turning
+     * a bulk line's confirmation into its outcome.
+     */
+    public static final String CONFIRMATION_WRITTEN_CHANNEL = "confirmation-written-channel";
+
+    /**
+     * Name of the channel carrying each written review-queue entry (the writer's reply) to the step turning
+     * a bulk line's review into its outcome.
+     */
+    public static final String REVIEW_WRITTEN_CHANNEL = "review-written-channel";
+
+    /**
      * @return the shared intake channel
      */
     // A DirectChannel hands each message to its single subscriber in the sender's own thread, like a
@@ -275,6 +287,22 @@ public class IntegrationConfig {
      */
     @Bean(REPORT_CHANNEL)
     public DirectChannel reportChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the channel after the confirmation file writer
+     */
+    @Bean(CONFIRMATION_WRITTEN_CHANNEL)
+    public DirectChannel confirmationWrittenChannel() {
+        return new DirectChannel();
+    }
+
+    /**
+     * @return the channel after the review-queue file writer
+     */
+    @Bean(REVIEW_WRITTEN_CHANNEL)
+    public DirectChannel reviewWrittenChannel() {
         return new DirectChannel();
     }
 
