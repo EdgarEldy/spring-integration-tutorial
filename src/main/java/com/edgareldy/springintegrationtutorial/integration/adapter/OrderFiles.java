@@ -2,7 +2,9 @@ package com.edgareldy.springintegrationtutorial.integration.adapter;
 
 import com.edgareldy.springintegrationtutorial.config.IntegrationConfig;
 import com.edgareldy.springintegrationtutorial.entity.Order;
+import com.edgareldy.springintegrationtutorial.integration.error.OrderFailureRecordingAdvice;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.StringJoiner;
 import org.springframework.integration.file.FileHeaders;
 import org.springframework.integration.file.outbound.FileWritingMessageHandler;
@@ -55,15 +57,21 @@ final class OrderFiles {
     }
 
     /**
-     * @param directory where the files are written
+     * @param directory     where the files are written
+     * @param failureAdvice records a failure of the writer (order set to FAILED, dead-letter file)
      * @return a file writer naming each file after its {@code file_name} header
      */
     // FileWritingMessageHandler is Spring Integration's outbound file adapter: it writes the payload of
     // each message (a String here) into a file of its directory. Its default file name generator reads the
     // file_name header, set by render(). It first writes under a temporary ".writing" name and renames the
     // file once complete, so whoever watches the directory never reads a half-written file.
-    static FileWritingMessageHandler writer(Path directory) {
+    static FileWritingMessageHandler writer(Path directory, OrderFailureRecordingAdvice failureAdvice) {
         FileWritingMessageHandler writer = new FileWritingMessageHandler(directory.toFile());
+        // Writing the file is a step after persistence: a failure sets the order to FAILED and writes a dead
+        // letter. The advice is set on the handler itself because, for a handler returned by a @Bean method,
+        // the adviceChain attribute of @ServiceActivator is not applied to a reply-producing handler such as
+        // this one.
+        writer.setAdviceChain(List.of(failureAdvice));
         writer.setAutoCreateDirectory(true);
         writer.setCharset("UTF-8");
         // One file per order: writing it again (the same order id after the database was recreated, for
