@@ -3,6 +3,8 @@ package com.edgareldy.springintegrationtutorial.integration.error;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.edgareldy.springintegrationtutorial.config.IntegrationConfig;
+import com.edgareldy.springintegrationtutorial.entity.Order;
 import com.edgareldy.springintegrationtutorial.exception.ResourceNotFoundException;
 import com.edgareldy.springintegrationtutorial.integration.message.LineOutcome;
 import com.edgareldy.springintegrationtutorial.integration.splitter.OrderFileSplitter;
@@ -61,6 +63,30 @@ class OrderLineErrorHandlerTest {
         assertThatThrownBy(() -> handler.toFailedOutcome(errorMessage))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Cannot identify the failed order line");
+    }
+
+    @Test
+    void _04_ShouldKeepTheOrderId_WhenTheLineFailedWhileItsOutboundFileWasWritten() {
+        Message<String> fileMessage = MessageBuilder.withPayload("orderId=42")
+                .setHeader(IntegrationConfig.ORDER_ID_HEADER, 42L).build();
+        MessageHandlingException failure = new MessageHandlingException(fileMessage, "writer failed",
+                new IllegalStateException("Disk full"));
+
+        Message<LineOutcome> outcome = handler.toFailedOutcome(new ErrorMessage(failure, line()));
+
+        assertThat(outcome.getPayload()).isEqualTo(LineOutcome.failed(3, "-1,2,1", 42L, "Disk full"));
+    }
+
+    @Test
+    void _05_ShouldKeepTheOrderId_WhenTheLineFailedOnAStepHandlingThePersistedOrder() {
+        Order order = new Order();
+        order.setId(43L);
+        MessageHandlingException failure = new MessageHandlingException(MessageBuilder.withPayload(order).build(),
+                "status step failed", new IllegalStateException("Connection lost"));
+
+        Message<LineOutcome> outcome = handler.toFailedOutcome(new ErrorMessage(failure, line()));
+
+        assertThat(outcome.getPayload().orderId()).isEqualTo(43L);
     }
 
     private static Message<String> line() {
