@@ -1,6 +1,7 @@
 package com.edgareldy.springintegrationtutorial.integration.error;
 
 import com.edgareldy.springintegrationtutorial.config.IntegrationConfig;
+import com.edgareldy.springintegrationtutorial.entity.Order;
 import com.edgareldy.springintegrationtutorial.integration.message.LineOutcome;
 import com.edgareldy.springintegrationtutorial.integration.splitter.OrderFileSplitter;
 import org.springframework.core.NestedExceptionUtils;
@@ -34,6 +35,8 @@ public class OrderLineErrorHandler {
     // the gateway sent it, with the correlation id, sequence and line headers the aggregator needs. The
     // outcome copies those headers, so the aggregator files it under the right file, exactly as it would a
     // successful line.
+    // This is also the seam of a line failing after persistence: the exception's failed message then
+    // identifies the order, whose id the failed outcome keeps.
     @ServiceActivator(inputChannel = IntegrationConfig.ORDER_LINE_ERROR_CHANNEL,
             outputChannel = IntegrationConfig.LINE_OUTCOME_CHANNEL)
     public Message<LineOutcome> toFailedOutcome(ErrorMessage errorMessage) {
@@ -50,8 +53,25 @@ public class OrderLineErrorHandler {
         // The exception reaching the gateway wraps the real one (a MessageHandlingException naming the failing
         // endpoint); the report keeps the root cause, the part a person dropping the file can act on.
         String reason = NestedExceptionUtils.getMostSpecificCause(failure).getMessage();
-        return MessageBuilder.withPayload(LineOutcome.failed(lineNumber == null ? 0 : lineNumber, content, reason))
+        LineOutcome outcome = LineOutcome.failed(lineNumber == null ? 0 : lineNumber, content,
+                orderIdOf(failure), reason);
+        return MessageBuilder.withPayload(outcome)
                 .copyHeaders(line.getHeaders())
                 .build();
+    }
+
+    // The failed message of the exception is the one the failing endpoint was handling. Once the order is
+    // persisted, every later message of the flow carries the orderId header (the rendered outbound file) or
+    // the order itself (the status step), so a failure after persistence still names the order it concerns.
+    private static Long orderIdOf(Throwable failure) {
+        if (!(failure instanceof MessagingException messagingException)
+                || messagingException.getFailedMessage() == null) {
+            return null;
+        }
+        Message<?> failedMessage = messagingException.getFailedMessage();
+        if (failedMessage.getPayload() instanceof Order order) {
+            return order.getId();
+        }
+        return failedMessage.getHeaders().get(IntegrationConfig.ORDER_ID_HEADER, Long.class);
     }
 }
