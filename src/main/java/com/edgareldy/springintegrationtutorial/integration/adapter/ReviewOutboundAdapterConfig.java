@@ -4,6 +4,7 @@ import com.edgareldy.springintegrationtutorial.config.IntegrationConfig;
 import com.edgareldy.springintegrationtutorial.entity.Order;
 import com.edgareldy.springintegrationtutorial.entity.OrderStatus;
 import com.edgareldy.springintegrationtutorial.service.OrderService;
+import com.edgareldy.springintegrationtutorial.integration.error.OrderFailureRecordingAdvice;
 import java.nio.file.Path;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -46,8 +47,10 @@ public class ReviewOutboundAdapterConfig {
      * @param order an order the router found at or above the review threshold
      * @return the order with its status {@code PENDING_REVIEW}
      */
+    // Steps after persistence: a failure is recorded (FAILED, dead letter) by orderFailureRecordingAdvice.
     @ServiceActivator(inputChannel = IntegrationConfig.MANUAL_REVIEW_CHANNEL,
-            outputChannel = IntegrationConfig.REVIEW_QUEUE_CHANNEL)
+            outputChannel = IntegrationConfig.REVIEW_QUEUE_CHANNEL,
+            adviceChain = "orderFailureRecordingAdvice")
     public Order queueForReview(Order order) {
         return orderService.updateStatus(order.getId(), OrderStatus.PENDING_REVIEW);
     }
@@ -57,7 +60,8 @@ public class ReviewOutboundAdapterConfig {
      * @return the review-queue entry, with the two requests that resolve the order
      */
     @Transformer(inputChannel = IntegrationConfig.REVIEW_QUEUE_CHANNEL,
-            outputChannel = IntegrationConfig.REVIEW_FILE_CHANNEL)
+            outputChannel = IntegrationConfig.REVIEW_FILE_CHANNEL,
+            adviceChain = "orderFailureRecordingAdvice")
     public Message<String> toReviewEntry(Message<Order> message) {
         Long orderId = message.getPayload().getId();
         return OrderFiles.render(message,
@@ -66,14 +70,15 @@ public class ReviewOutboundAdapterConfig {
     }
 
     /**
+     * @param orderFailureRecordingAdvice records a failure of the writer
      * @return the writer of the review-queue entries
      */
     // Replies with the written entry on review-written-channel, like the confirmation writer: for a line of a
     // bulk file, that reply becomes the line's pending review outcome.
     @Bean
     @ServiceActivator(inputChannel = IntegrationConfig.REVIEW_FILE_CHANNEL)
-    public FileWritingMessageHandler reviewFileWriter() {
-        FileWritingMessageHandler writer = OrderFiles.writer(reviewsDirectory);
+    public FileWritingMessageHandler reviewFileWriter(OrderFailureRecordingAdvice orderFailureRecordingAdvice) {
+        FileWritingMessageHandler writer = OrderFiles.writer(reviewsDirectory, orderFailureRecordingAdvice);
         writer.setExpectReply(true);
         writer.setOutputChannelName(IntegrationConfig.REVIEW_WRITTEN_CHANNEL);
         return writer;

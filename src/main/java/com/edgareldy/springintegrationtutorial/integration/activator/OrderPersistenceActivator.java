@@ -33,8 +33,11 @@ public class OrderPersistenceActivator {
     // The output is the persisted order, not the command, because the next step, the content-based router,
     // decides on the stored total snapshot. Persistence therefore happens exactly once, here, whichever
     // branch the router then picks: every branch only updates the status of an order that already exists.
+    // adviceChain names the advice beans wrapping this endpoint's handler: a transient database error is
+    // retried by orderPersistenceRetryAdvice (IntegrationConfig) before it counts as a failure.
     @ServiceActivator(inputChannel = IntegrationConfig.ORDER_COMMAND_CHANNEL,
-            outputChannel = IntegrationConfig.PERSISTED_ORDER_CHANNEL)
+            outputChannel = IntegrationConfig.PERSISTED_ORDER_CHANNEL,
+            adviceChain = "orderPersistenceRetryAdvice")
     public Order persist(OrderCommand command) {
         return orderService.receive(command);
     }

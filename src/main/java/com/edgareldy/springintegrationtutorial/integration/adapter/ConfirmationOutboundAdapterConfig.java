@@ -4,6 +4,7 @@ import com.edgareldy.springintegrationtutorial.config.IntegrationConfig;
 import com.edgareldy.springintegrationtutorial.entity.Order;
 import com.edgareldy.springintegrationtutorial.entity.OrderStatus;
 import com.edgareldy.springintegrationtutorial.service.OrderService;
+import com.edgareldy.springintegrationtutorial.integration.error.OrderFailureRecordingAdvice;
 import java.nio.file.Path;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -51,8 +52,11 @@ public class ConfirmationOutboundAdapterConfig {
      * @param order an order the router found under the review threshold
      * @return the order with its status {@code AUTO_CONFIRMED}
      */
+    // Every step of this adapter runs after persistence: orderFailureRecordingAdvice sets the order to FAILED
+    // and writes a dead letter when one of them fails, on the HTTP path as on the file path.
     @ServiceActivator(inputChannel = IntegrationConfig.AUTO_CONFIRM_CHANNEL,
-            outputChannel = IntegrationConfig.CONFIRMATION_CHANNEL)
+            outputChannel = IntegrationConfig.CONFIRMATION_CHANNEL,
+            adviceChain = "orderFailureRecordingAdvice")
     public Order autoConfirm(Order order) {
         return orderService.updateStatus(order.getId(), OrderStatus.AUTO_CONFIRMED);
     }
@@ -65,12 +69,14 @@ public class ConfirmationOutboundAdapterConfig {
     // the text of its file. Keeping it apart from the file writer leaves the writer a plain, generic
     // adapter that only knows how to write a String into a directory.
     @Transformer(inputChannel = IntegrationConfig.CONFIRMATION_CHANNEL,
-            outputChannel = IntegrationConfig.CONFIRMATION_FILE_CHANNEL)
+            outputChannel = IntegrationConfig.CONFIRMATION_FILE_CHANNEL,
+            adviceChain = "orderFailureRecordingAdvice")
     public Message<String> toConfirmationFile(Message<Order> message) {
         return OrderFiles.render(message);
     }
 
     /**
+     * @param orderFailureRecordingAdvice records a failure of the writer
      * @return the writer of the confirmation files
      */
     // @ServiceActivator on a @Bean returning a MessageHandler subscribes that ready-made handler to the input
@@ -79,8 +85,8 @@ public class ConfirmationOutboundAdapterConfig {
     // for a line of a bulk file, that reply becomes the line's auto-confirmed outcome, only once the file exists.
     @Bean
     @ServiceActivator(inputChannel = IntegrationConfig.CONFIRMATION_FILE_CHANNEL)
-    public FileWritingMessageHandler confirmationFileWriter() {
-        FileWritingMessageHandler writer = OrderFiles.writer(confirmationsDirectory);
+    public FileWritingMessageHandler confirmationFileWriter(OrderFailureRecordingAdvice orderFailureRecordingAdvice) {
+        FileWritingMessageHandler writer = OrderFiles.writer(confirmationsDirectory, orderFailureRecordingAdvice);
         writer.setExpectReply(true);
         // A ready-made handler declared as a @Bean takes its output channel itself, not from the annotation.
         writer.setOutputChannelName(IntegrationConfig.CONFIRMATION_WRITTEN_CHANNEL);

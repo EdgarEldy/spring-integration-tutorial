@@ -1,16 +1,23 @@
 package com.edgareldy.springintegrationtutorial.config;
 
 import java.time.Duration;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.dao.RecoverableDataAccessException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.integration.channel.DirectChannel;
+import org.springframework.integration.handler.advice.RequestHandlerRetryAdvice;
 import org.springframework.integration.scheduling.PollerMetadata;
 import org.springframework.scheduling.support.PeriodicTrigger;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.util.Assert;
 
 /**
  * Central place for the message channels shared by several flows and for the default poller of every
- * polling endpoint.
+ * polling endpoint, plus the retry advice of the persistence step.
  * <p>
  * Created edgar.muhamyangabo on 9/26/26
  * Author : edgar.muhamyangabo
@@ -95,6 +102,14 @@ public class IntegrationConfig {
      * Header carrying the administrator's reason on a rejected order.
      */
     public static final String REJECTION_REASON_HEADER = "rejectionReason";
+
+    /**
+     * The failures the persistence step retries (transient database errors), declared once for the retry
+     * policy and for the error handlers that need to tell a failure after exhausted retries apart.
+     */
+    public static final List<Class<? extends Throwable>> RETRIED_PERSISTENCE_FAILURES = List.of(
+            TransientDataAccessException.class, RecoverableDataAccessException.class,
+            CannotCreateTransactionException.class);
 
     /**
      * Name of the channel carrying the whole content of each dropped file from the file adapter to the
@@ -307,7 +322,58 @@ public class IntegrationConfig {
     }
 
     /**
-     * @param fixedDelay       milliseconds between the end of one poll and the start of the next
+     * @param maxAttempts how many attempts a transient failure gets in total, the first one included
+     * @param retryDelay  the wait between two attempts
+     * @return the retry advice of the persistence activator
+     */
+    // An advice wraps the invocation of one endpoint's handler, the way an AOP interceptor wraps a method:
+    // here the handler is invoked again when it throws, and only once the attempts are exhausted does the
+    // exception leave the endpoint (to the HTTP caller through the gateway, or to the error channel of the
+    // per-line gateway on the file path). It is attached to OrderPersistenceActivator through its adviceChain, so only the
+    // database step is retried: the transformer before it is pure computation, and retrying it would
+    // fail the same way every time.
+    // Each attempt calls OrderService.receive() again, which opens a new transaction: a failed attempt
+    // rolled back its own work, so a retry never leaves a half-written order behind.
+    // The policy only retries what may succeed on a second try: TransientDataAccessException (lock or
+    // query timeout, deadlock victim), RecoverableDataAccessException (a lost connection that can be
+    // reopened) and CannotCreateTransactionException (no connection available when the transaction
+    // starts). The exception is looked up along the whole cause chain, since the endpoint wraps it in a
+    // MessageHandlingException. Everything else fails at once: an unknown customer or product
+    // (ResourceNotFoundException) is still unknown a second later, and a constraint violation does not
+    // go away either.
+    @Bean
+    public RequestHandlerRetryAdvice orderPersistenceRetryAdvice(
+            @Value("${orders.persistence.max-attempts}") int maxAttempts,
+            @Value("${orders.persistence.retry-delay}") Duration retryDelay) {
+        Assert.isTrue(maxAttempts >= 1, "orders.persistence.max-attempts must be at least 1");
+        RequestHandlerRetryAdvice advice = new RequestHandlerRetryAdvice();
+        advice.setRetryPolicy(RetryPolicy.builder()
+                // The policy counts retries, which come after the first attempt.
+                .maxRetries(maxAttempts - 1L)
+                .delay(retryDelay)
+                .includes(RETRIED_PERSISTENCE_FAILURES)
+                .build());
+        return advice;
+    }
+
+    /**
+     * @param failure a failure of the flow
+     * @return whether it is one the persistence retry advice retries, found anywhere in its cause chain: when
+     *         it still escapes the persistence step, its retries were exhausted
+     */
+    public static boolean isRetriedPersistenceFailure(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            for (Class<? extends Throwable> type : RETRIED_PERSISTENCE_FAILURES) {
+                if (type.isInstance(cause)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @param fixedDelay        milliseconds between the end of one poll and the start of the next
      * @param maxMessagesPerPoll how many messages one poll may take at most
      * @return the poller used by every polling endpoint that does not declare its own
      */

@@ -36,6 +36,12 @@ orders:
   poller:
     fixed-delay: 1000
     max-messages-per-poll: 10
+  # Retry of the persistence step (IntegrationConfig, RequestHandlerRetryAdvice): how many attempts in
+  # total (the first one included) a transient database error gets, and how long to wait between two of
+  # them. Other failures (unknown customer or product, malformed line) are never retried.
+  persistence:
+    max-attempts: 3
+    retry-delay: 500ms
 
 app:
   jwt:
