@@ -1,0 +1,22 @@
+# Automated tests (@ActiveProfiles("test")). The datasource comes from the Testcontainers
+# @ServiceConnection, so nothing here points at a database.
+orders:
+  # The flows read and write real directories: in tests they live under target/, so a test run never
+  # touches the incoming-orders/, outgoing-orders/ and failed-orders/ folders of the repository, and
+  # "mvnw clean" wipes them.
+  directories:
+    incoming: target/test-orders/incoming-orders
+    outgoing: target/test-orders/outgoing-orders
+    failed: target/test-orders/failed-orders
+  # A short poll interval keeps the file-based tests fast.
+  poller:
+    fixed-delay: 100
+  # Same number of attempts as in production, so the tests count the real retries, but almost no wait
+  # between them.
+  persistence:
+    retry-delay: 10ms
+
+app:
+  jwt:
+    # Fixed secret so the tests can issue and verify tokens without any environment variable.
+    secret: test-only-jwt-secret-of-at-least-32-bytes

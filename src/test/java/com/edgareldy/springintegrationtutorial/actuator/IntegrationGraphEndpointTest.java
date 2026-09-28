@@ -1,0 +1,95 @@
+package com.edgareldy.springintegrationtutorial.actuator;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.edgareldy.springintegrationtutorial.TestcontainersConfiguration;
+import com.edgareldy.springintegrationtutorial.config.IntegrationConfig;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.assertj.MockMvcTester;
+
+/**
+ * Checks that the dev profile exposes the Actuator integrationgraph endpoint, publicly, with the
+ * flow's channels in it.
+ * <p>
+ * Created edgar.muhamyangabo on 9/26/26
+ * Author : edgar.muhamyangabo
+ * Date : 9/26/26
+ * Project : spring-integration-tutorial
+ */
+// The real dev profile is activated, so the test reads the exposure list from application-dev.yml
+// itself. Its localhost datasource is ignored: the @ServiceConnection of the Testcontainers
+// configuration takes precedence over spring.datasource.* properties. The test profile comes last, so
+// its isolated directories win over the repository folders the dev profile would otherwise use.
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(TestcontainersConfiguration.class)
+@ActiveProfiles({"dev", "test"})
+class IntegrationGraphEndpointTest {
+
+    @Autowired
+    private MockMvcTester mvc;
+
+    @Test
+    void _01_ShouldDescribeTheIntakeFlow_WhenAnAnonymousCallerRequestsTheGraph() {
+        // IntegrationGraphServer walks every channel, endpoint and adapter registered in the context and
+        // builds a graph of nodes and links; the endpoint serves it as JSON. errorChannel is declared by
+        // Spring Integration itself, the two channels by IntegrationConfig. An annotated component method
+        // gives an endpoint named <bean>.<method>.<annotation>, an annotated @Bean method <bean>.<annotation>.
+        assertThat(mvc.get().uri("/actuator/integrationgraph"))
+                .hasStatusOk()
+                .bodyJson()
+                .satisfies(json -> json.assertThat().extractingPath("$.nodes[*].name").asArray()
+                        .contains(IntegrationConfig.INTAKE_CHANNEL, IntegrationConfig.ORDER_COMMAND_CHANNEL,
+                                "errorChannel",
+                                "incomingOrderLines.inboundChannelAdapter",
+                                "rawOrderTransformer.transform.transformer",
+                                "orderPersistenceActivator.persist.serviceActivator"));
+    }
+
+    @Test
+    void _02_ShouldDescribeTheRoutingAndReviewFlow_WhenAnAnonymousCallerRequestsTheGraph() {
+        assertThat(mvc.get().uri("/actuator/integrationgraph"))
+                .hasStatusOk()
+                .bodyJson()
+                .satisfies(json -> json.assertThat().extractingPath("$.nodes[*].name").asArray()
+                        .contains(IntegrationConfig.PERSISTED_ORDER_CHANNEL, IntegrationConfig.AUTO_CONFIRM_CHANNEL,
+                                IntegrationConfig.MANUAL_REVIEW_CHANNEL, IntegrationConfig.CONFIRMATION_CHANNEL,
+                                IntegrationConfig.CONFIRMATION_FILE_CHANNEL, IntegrationConfig.REVIEW_QUEUE_CHANNEL,
+                                IntegrationConfig.REVIEW_FILE_CHANNEL, IntegrationConfig.REJECTION_CHANNEL,
+                                IntegrationConfig.REJECTION_FILE_CHANNEL, IntegrationConfig.REVIEW_DECISION_CHANNEL,
+                                "orderValueRouter.route.router",
+                                "confirmationOutboundAdapterConfig.autoConfirm.serviceActivator",
+                                "confirmationOutboundAdapterConfig.toConfirmationFile.transformer",
+                                "confirmationFileWriter.serviceActivator",
+                                "reviewOutboundAdapterConfig.queueForReview.serviceActivator",
+                                "reviewOutboundAdapterConfig.toReviewEntry.transformer",
+                                "reviewFileWriter.serviceActivator",
+                                "rejectionOutboundAdapterConfig.toRejectionFile.transformer",
+                                "rejectionFileWriter.serviceActivator",
+                                "reviewDecisionActivator.resolve.serviceActivator"));
+    }
+
+    @Test
+    void _03_ShouldDescribeTheBulkFilePath_WhenAnAnonymousCallerRequestsTheGraph() {
+        assertThat(mvc.get().uri("/actuator/integrationgraph"))
+                .hasStatusOk()
+                .bodyJson()
+                .satisfies(json -> json.assertThat().extractingPath("$.nodes[*].name").asArray()
+                        .contains(IntegrationConfig.ORDER_FILE_CHANNEL, IntegrationConfig.ORDER_LINE_CHANNEL,
+                                IntegrationConfig.ORDER_LINE_ERROR_CHANNEL, IntegrationConfig.LINE_OUTCOME_CHANNEL,
+                                IntegrationConfig.REPORT_CHANNEL, IntegrationConfig.CONFIRMATION_WRITTEN_CHANNEL,
+                                IntegrationConfig.REVIEW_WRITTEN_CHANNEL,
+                                "orderFileSplitter.split.splitter",
+                                "orderLineActivator.dispatch.serviceActivator",
+                                "orderLineErrorHandler.toFailedOutcome.serviceActivator",
+                                "lineOutcomeActivator.confirmed.serviceActivator",
+                                "lineOutcomeActivator.queuedForReview.serviceActivator",
+                                "orderFileAggregator.aggregate.aggregator",
+                                "reportWriter.serviceActivator"));
+    }
+}
